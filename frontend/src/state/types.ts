@@ -1,0 +1,67 @@
+// --- NEW FILL TYPES ---
+export interface SolidFill {
+	type: 'solid';
+	color: string;
+}
+
+export interface GradientStop {
+	color: string;
+	offset: number; // 0 to 1
+}
+
+export interface LinearGradientFill {
+	type: 'linear-gradient';
+	angle: number;
+	stops: GradientStop[];
+}
+
+export type Fill = SolidFill | LinearGradientFill;
+// --------------------
+
+export interface BaseElement {
+	id: string;
+	element_type: string;
+	x: number; y: number;
+	rotation: number;
+	width: number; height: number;
+	zIndex: number; isVisible: boolean;
+	parentId: string | null;
+	name: string;
+}
+
+export interface ShapeElement extends BaseElement {
+	element_type: "shape";
+	shape_type: "rect" | "circle";
+	fill: Fill; // <-- UPDATED
+	stroke: string;
+	stroke_width: number;
+}
+
+export interface GroupElement extends BaseElement {
+	element_type: 'group';
+}
+
+export type CanvasElement = ShapeElement | GroupElement;
+
+// --- NEW ---
+export type ActiveTool = 'select' | 'rectangle';
+
+export type AppState = {
+	elements: Record<string, CanvasElement>;
+	selectedElementIds: string[];
+	groupEditingId: string | null;
+	activeTool: ActiveTool; // <-- ADDED
+};
+
+export type Action =
+	| { type: 'SET_WORKSPACE_STATE'; payload: CanvasElement[] }
+	| { type: 'ELEMENT_CREATED'; payload: CanvasElement }
+	| { type: 'ELEMENT_UPDATED'; payload: CanvasElement }
+	| { type: 'ELEMENTS_UPDATED'; payload: CanvasElement[] }
+	| { type: 'ELEMENT_DELETED'; payload: { id: string } }
+	| { type: 'SET_SELECTION'; payload: { ids: string[] } }
+	| { type: 'ADD_TO_SELECTION'; payload: { id: string } }
+	| { type: 'REMOVE_FROM_SELECTION'; payload: { id: string } }
+	| { type: 'ENTER_GROUP_EDITING'; payload: { groupId: string; elementId: string } }
+	| { type: 'EXIT_GROUP_EDITING' }
+	| { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }; // <-- ADDED
