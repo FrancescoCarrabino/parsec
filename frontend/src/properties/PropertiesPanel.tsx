@@ -163,10 +163,18 @@ export const PropertiesPanel: React.FC = () => {
       <div style={sectionStyle}>
         <div style={titleStyle}>Arrange</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <ReorderButton onClick={() => handleReorder('BRING_FORWARD')} title="Bring Forward" disabled={!selectedElement} />
-          <ReorderButton onClick={() => handleReorder('SEND_BACKWARD')} title="Send Backward" disabled={!selectedElement} />
-          <ReorderButton onClick={() => handleReorder('BRING_TO_FRONT')} title="Bring to Front" disabled={!selectedElement} />
-          <ReorderButton onClick={() => handleReorder('SEND_TO_BACK')} title="Send to Back" disabled={!selectedElement} />
+          <ReorderButton onClick={() => handleReorder('BRING_FORWARD')} title="Bring Forward" disabled={!selectedElement}>
+            Forward
+          </ReorderButton>
+          <ReorderButton onClick={() => handleReorder('SEND_BACKWARD')} title="Send Backward" disabled={!selectedElement}>
+            Backward
+          </ReorderButton>
+          <ReorderButton onClick={() => handleReorder('BRING_TO_FRONT')} title="Bring to Front" disabled={!selectedElement}>
+            To Front
+          </ReorderButton>
+          <ReorderButton onClick={() => handleReorder('SEND_TO_BACK')} title="Send to Back" disabled={!selectedElement}>
+            To Back
+          </ReorderButton>
         </div>
       </div>
     </div>

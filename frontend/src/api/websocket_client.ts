@@ -89,6 +89,9 @@ class WebSocketClient {
 	public sendReparentElement(childId: string, newParentId: string | null) {
 		this.sendMessage({ type: "reparent_element", payload: { childId, newParentId } });
 	}
+	public sendDeleteElement(id: string) {
+		this.sendMessage({ type: "delete_element", payload: { id } });
+	}
 }
 
 export const webSocketClient = new WebSocketClient();

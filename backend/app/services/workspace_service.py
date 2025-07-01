@@ -244,3 +244,35 @@ class WorkspaceService:
             f"Reparented element {child_id} to {new_parent_id}. New relative coords: ({child.x}, {child.y})"
         )
         return [child]  # Return the updated child
+
+    def delete_element(self, element_id: str) -> List[str]:
+        """
+        Deletes an element and all of its descendants recursively.
+        Returns a list of all IDs that were deleted.
+        """
+        if element_id not in self.elements:
+            return []
+
+        ids_to_delete = [element_id]
+
+        # Find all children recursively
+        children_to_check = [element_id]
+        while children_to_check:
+            current_parent_id = children_to_check.pop(0)
+            children = [
+                el.id
+                for el in self.elements.values()
+                if el.parentId == current_parent_id
+            ]
+            ids_to_delete.extend(children)
+            children_to_check.extend(children)
+
+        # Delete all identified elements from the workspace
+        deleted_ids = []
+        for an_id in ids_to_delete:
+            if an_id in self.elements:
+                del self.elements[an_id]
+                deleted_ids.append(an_id)
+
+        logger.info(f"Deleted elements with IDs: {deleted_ids}")
+        return deleted_ids

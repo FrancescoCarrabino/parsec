@@ -12,24 +12,16 @@ export const Canvas = () => {
   const { state, dispatch } = useAppState();
   const { elements, selectedElementIds, groupEditingId, activeTool } = state;
 
-  // --- Canvas view state ---
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [stageScale, setStageScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-
-  // --- Tool-specific state ---
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawingRect, setDrawingRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const drawingStartPos = useRef<Vector2d>({ x: 0, y: 0 });
-
-  // --- Marquee selection state ---
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
-
-  // --- State for the inline text editing overlay ---
   const [editingText, setEditingText] = useState<{ id: string; node: Konva.Text } | null>(null);
 
-  // --- Refs for direct node manipulation ---
   const transformerRef = useRef<Konva.Transformer>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -48,7 +40,21 @@ export const Canvas = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
       const isTyping = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
-      if (e.key === ' ' && !isTyping) { e.preventDefault(); setIsPanning(true); }
+
+      // --- DELETE LOGIC ---
+      if ((e.key === 'Backspace' || e.key === 'Delete') && !isTyping && selectedElementIds.length > 0) {
+        e.preventDefault(); // Prevent browser back navigation on Backspace
+        selectedElementIds.forEach(id => {
+          webSocketClient.sendDeleteElement(id);
+        });
+        dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
+        return; // Exit early
+      }
+
+      if (isTyping) return; // Prevent other shortcuts while typing
+
+      if (e.key === ' ') { e.preventDefault(); setIsPanning(true); }
+
       if (e.key === 'Escape') {
         if (editingText) { setEditingText(null); }
         else if (groupEditingId) { dispatch({ type: 'EXIT_GROUP_EDITING' }); }
@@ -57,10 +63,11 @@ export const Canvas = () => {
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === ' ') { e.preventDefault(); setIsPanning(false); }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [dispatch, groupEditingId, editingText]);
+  }, [dispatch, groupEditingId, editingText, selectedElementIds]);
 
   useEffect(() => {
     if (!transformerRef.current || !stageRef.current) return;
@@ -73,12 +80,10 @@ export const Canvas = () => {
     if (editingText && textareaRef.current) { textareaRef.current.focus(); }
   }, [editingText]);
 
-  // --- Helper function for collision detection ---
   const haveIntersection = (r1: any, r2: any) => {
     return !(r2.x > r1.x + r1.width || r2.x + r2.width < r1.x || r2.y > r1.y + r1.height || r2.y + r2.height < r1.y);
   };
 
-  // --- Text Editing Handlers ---
   const finishEditing = () => {
     if (!editingText || !textareaRef.current) return;
     const newContent = textareaRef.current.value;
@@ -91,12 +96,9 @@ export const Canvas = () => {
     if (e.key === 'Escape') { setEditingText(null); }
   };
 
-  // --- Canvas and Element Event Handlers ---
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    setMarqueeRect(null); // Clear previous marquee on any new mousedown
-
-    if (e.target !== stageRef.current) return; // Only initiate actions on stage background
-
+    setMarqueeRect(null);
+    if (e.target !== stageRef.current) return;
     if (activeTool === 'select' && !isPanning) {
       setIsMarqueeSelecting(true);
       const pos = e.target.getStage()?.getRelativePointerPosition();
@@ -105,7 +107,6 @@ export const Canvas = () => {
       dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
       return;
     }
-
     if (activeTool === 'text') {
       const pos = e.target.getStage()?.getRelativePointerPosition();
       if (!pos) return;
@@ -113,7 +114,6 @@ export const Canvas = () => {
       dispatch({ type: "SET_ACTIVE_TOOL", payload: { tool: "select" } });
       return;
     }
-
     const isDrawingToolActive = activeTool === 'rectangle' || activeTool === 'frame';
     if (isPanning || !isDrawingToolActive) return;
     setIsDrawing(true);
@@ -133,7 +133,6 @@ export const Canvas = () => {
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
     const pos = e.target.getStage()?.getRelativePointerPosition();
     if (!pos) return;
-
     if (isMarqueeSelecting) {
       const startPos = marqueeRect!;
       setMarqueeRect({
@@ -142,7 +141,6 @@ export const Canvas = () => {
       });
       return;
     }
-
     if (!isDrawing) return;
     const startPos = drawingStartPos.current;
     setDrawingRect({
@@ -160,7 +158,6 @@ export const Canvas = () => {
           if (node.getParent()?.className === 'Transformer') return false;
           return haveIntersection(marqueeRect, node.getClientRect());
         });
-
         const idsToSelect = new Set<string>();
         selectedNodes.forEach(node => {
           const element = elements[node.id()];
@@ -174,16 +171,14 @@ export const Canvas = () => {
       setIsMarqueeSelecting(false);
       return;
     }
-
     setIsDrawing(false);
     if (!drawingRect || (drawingRect.width < 5 && drawingRect.height < 5)) {
       setDrawingRect(null); return;
     }
-
     if (activeTool === 'rectangle') {
       webSocketClient.sendCreateElement({ element_type: 'shape', shape_type: 'rect', x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height, fill: { type: 'solid', color: '#cccccc' } });
     } else if (activeTool === 'frame') {
-      webSocketClient.sendCreateElement({ element_type: 'frame', x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height, fill: { type: 'solid', color: 'rgba(70, 70, 70, 0.5)' }, stroke: 'rgba(255, 255, 255, 0.2)' });
+      webSocketClient.sendCreateElement({ element_type: 'frame', x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height, fill: { type: 'solid', color: 'rgba(70, 70, 70, 0.5)' }, stroke: { type: "solid", color: "#888888" }, strokeWidth: 1 });
     }
     setDrawingRect(null);
     dispatch({ type: "SET_ACTIVE_TOOL", payload: { tool: "select" } });

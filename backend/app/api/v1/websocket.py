@@ -197,6 +197,20 @@ async def websocket_endpoint(
                         "payload": [el.model_dump() for el in affected_elements],
                     }
                     await manager.broadcast(json.dumps(update_command))
+            elif msg_type == "delete_element":
+                logger.info(
+                    f"Received direct command to delete element: {payload['id']}"
+                )
+                deleted_ids = workspace.delete_element(payload["id"])
+
+                # We need to broadcast a separate delete command for each deleted element
+                # so the frontend reducer can process them one by one.
+                for an_id in deleted_ids:
+                    delete_command = {
+                        "type": "element_deleted",
+                        "payload": {"id": an_id},
+                    }
+                    await manager.broadcast(json.dumps(delete_command))
     except WebSocketDisconnect:
         logger.info(f"Client disconnected cleanly: {client_host}:{client_port}")
     except Exception as e:
