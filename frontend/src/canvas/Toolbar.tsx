@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppState } from '../state/AppStateContext';
 import type { ActiveTool } from '../state/types';
 
+// ToolButton component (no changes needed here)
 const ToolButton = ({
   title,
   tool,
@@ -12,7 +13,7 @@ const ToolButton = ({
   title: string,
   tool: ActiveTool,
   icon: string,
-  activeTool: ActiveTool,
+  activeTool: ActiveTool | undefined, // It's good practice to allow for an undefined activeTool
   onClick: (tool: ActiveTool) => void
 }) => {
   const isActive = activeTool === tool;
@@ -36,6 +37,7 @@ const ToolButton = ({
   );
 };
 
+// Toolbar component
 export const Toolbar = () => {
   const { state, dispatch } = useAppState();
 
@@ -61,7 +63,11 @@ export const Toolbar = () => {
     <div style={toolbarStyle}>
       <ToolButton title="Select (V)" tool="select" icon="➚" activeTool={state.activeTool} onClick={handleToolChange} />
       <ToolButton title="Rectangle (R)" tool="rectangle" icon="■" activeTool={state.activeTool} onClick={handleToolChange} />
-      {/* Future tools like Pen (P) or Text (T) will go here */}
+
+      {/* --- ADD THIS LINE --- */}
+      <ToolButton title="Text (T)" tool="text" icon="T" activeTool={state.activeTool} onClick={handleToolChange} />
+      <ToolButton title="Frame (F)" tool="frame" icon="[ ]" activeTool={state.activeTool} onClick={handleToolChange} />
+
     </div>
   );
 };

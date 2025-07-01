@@ -40,11 +40,26 @@ export interface ShapeElement extends BaseElement {
 export interface GroupElement extends BaseElement {
 	element_type: 'group';
 }
+export interface TextElement extends BaseElement {
+	element_type: 'text';
+	content: string;
+	fontFamily: string;
+	fontSize: number;
+	fontColor: string;
+	align: 'left' | 'center' | 'right';
+	verticalAlign: 'top' | 'middle' | 'bottom';
+}
+export interface FrameElement extends BaseElement {
+	element_type: 'frame';
+	fill: Fill;
+	stroke: string;
+	stroke_width: number;
+	clipsContent: boolean;
+}
 
-export type CanvasElement = ShapeElement | GroupElement;
-
-// --- NEW ---
-export type ActiveTool = 'select' | 'rectangle';
+// --- UPDATE THE UNION TYPES ---
+export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement;
+export type ActiveTool = 'select' | 'rectangle' | 'text' | 'frame';
 
 export type AppState = {
 	elements: Record<string, CanvasElement>;

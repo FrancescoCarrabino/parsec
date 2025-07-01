@@ -1,89 +1,166 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useAppState } from '../state/AppStateContext';
 import type { CanvasElement } from '../state/types';
+// --- CORRECTED IMPORT: DropTargetMonitor is removed ---
+import { useDrag, useDrop } from 'react-dnd';
 import { webSocketClient } from '../api/websocket_client';
 
-const ElementIcon = ({ element }: { element: CanvasElement }) => {
-  if (element.element_type === 'group') return <span style={{ fontSize: '18px', lineHeight: 1 }}>🗂️</span>;
-  if (element.element_type === 'shape') {
-    if (element.shape_type === 'rect') return <span style={{ fontSize: '18px', lineHeight: 1 }}>■</span>;
-    if (element.shape_type === 'circle') return <span style={{ fontSize: '18px', lineHeight: 1 }}>●</span>;
-  }
-  return <span style={{ fontSize: '18px', lineHeight: 1 }}>?</span>;
+// A unique type for our draggable items to be recognized by react-dnd
+const ItemTypes = {
+  LAYER: 'layer',
 };
 
-const VisibilityIcon = ({ isVisible }: { isVisible: boolean }) => {
-  return <span style={{ fontSize: '16px', opacity: isVisible ? 1 : 0.4, cursor: 'pointer' }}>👁️</span>;
+// --- Reusable Styles ---
+const panelStyle: React.CSSProperties = {
+  width: '240px',
+  height: '100%',
+  background: '#252627',
+  color: '#ccc',
+  padding: '16px 8px',
+  boxSizing: 'border-box',
+  fontFamily: 'sans-serif',
+  fontSize: '13px',
+  borderRight: '1px solid #444',
+  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
 };
 
-export const LayersPanel = () => {
+const titleStyle: React.CSSProperties = {
+  color: 'white',
+  fontWeight: 'bold',
+  padding: '0 8px',
+  marginBottom: '10px',
+  borderBottom: '1px solid #444',
+  paddingBottom: '8px',
+  fontSize: '16px',
+};
+
+const layerListStyle: React.CSSProperties = {
+  flexGrow: 1,
+};
+
+// --- Recursive Layer Item Component with Drag-and-Drop ---
+interface LayerItemProps {
+  element: CanvasElement;
+  depth: number;
+  allElements: CanvasElement[];
+}
+
+const LayerItem: React.FC<LayerItemProps> = ({ element, depth, allElements }) => {
   const { state, dispatch } = useAppState();
-  const { elements, selectedElementIds } = state;
+  const ref = useRef<HTMLDivElement>(null); // Ref for the drop target div
 
-  const sortedElements = Object.values(elements).sort((a, b) => b.zIndex - a.zIndex);
+  // Setup for making this component draggable
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: ItemTypes.LAYER,
+    item: { id: element.id },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  }));
 
-  const handleLayerClick = (e: React.MouseEvent, id: string) => {
-    const isShiftPressed = e.shiftKey;
-    const isSelected = selectedElementIds.includes(id);
-    if (isShiftPressed) {
-      if (isSelected) dispatch({ type: 'REMOVE_FROM_SELECTION', payload: { id } });
-      else dispatch({ type: 'ADD_TO_SELECTION', payload: { id } });
-    } else {
-      dispatch({ type: 'SET_SELECTION', payload: { ids: [id] } });
-    }
+  // Setup for making this component a drop target
+  const [{ isOver, canDrop }, drop] = useDrop(() => ({
+    accept: ItemTypes.LAYER,
+    drop: (item: { id: string }) => {
+      if (element.element_type === 'frame' || element.element_type === 'group') {
+        webSocketClient.sendReparentElement(item.id, element.id);
+      }
+    },
+    canDrop: (item: { id: string }) => {
+      if (item.id === element.id) return false;
+      const isContainer = element.element_type === 'frame' || element.element_type === 'group';
+      return isContainer;
+    },
+    // --- CORRECTED: The type for 'monitor' is inferred automatically by TypeScript ---
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+      canDrop: !!monitor.canDrop(),
+    }),
+  }));
+
+  // Attach both drag and drop refs to the same DOM node
+  drag(drop(ref));
+
+  const isSelected = state.selectedElementIds.includes(element.id);
+  const handleSelect = () => { dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } }); };
+
+  const itemStyle: React.CSSProperties = {
+    padding: `4px 8px`,
+    paddingLeft: `${8 + depth * 20}px`,
+    borderRadius: '4px',
+    marginBottom: '2px',
+    cursor: 'move',
+    backgroundColor: isSelected
+      ? 'rgba(0, 122, 255, 0.4)'
+      : isOver && canDrop
+        ? 'rgba(0, 255, 122, 0.2)'
+        : 'transparent',
+    opacity: isDragging ? 0.4 : 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    border: isOver && canDrop ? '1px dashed rgba(0, 255, 122, 0.5)' : '1px dashed transparent',
+    transition: 'background-color 150ms ease-in-out, border 150ms ease-in-out',
   };
 
-  const handleVisibilityToggle = (e: React.MouseEvent, element: CanvasElement) => {
-    e.stopPropagation();
-    const newVisibility = !element.isVisible;
-    const updatePayload = { ...element, isVisible: newVisibility };
-    dispatch({ type: 'ELEMENT_UPDATED', payload: updatePayload });
-    webSocketClient.sendElementUpdate({ id: element.id, isVisible: newVisibility });
-  };
+  const children = (element.element_type === 'group' || element.element_type === 'frame')
+    ? allElements.filter(child => child.parentId === element.id)
+    : [];
 
-  const canGroup = selectedElementIds.length > 1;
-  const canUngroup = selectedElementIds.length === 1 && elements[selectedElementIds[0]]?.element_type === 'group';
+  const Icon = () => (
+    <span style={{ opacity: 0.8 }}>
+      {element.element_type === 'frame' ? '🖼️' : element.element_type === 'group' ? '📁' : element.element_type === 'text' ? 'T' : '📄'}
+    </span>
+  );
 
-  const handleGroup = () => {
-    if (!canGroup) return;
-    webSocketClient.sendGroupElements(selectedElementIds);
-  };
+  return (
+    <>
+      <div ref={ref} style={itemStyle} onMouseDown={handleSelect}>
+        <Icon />
+        <span>{element.name || element.id.substring(0, 8)}</span>
+      </div>
+      {children.map(child => (
+        <LayerItem
+          key={child.id}
+          element={child}
+          depth={depth + 1}
+          allElements={allElements}
+        />
+      ))}
+    </>
+  );
+};
 
-  const handleUngroup = () => {
-    if (!canUngroup) return;
-    webSocketClient.sendUngroupElement(selectedElementIds[0]);
-  };
+// --- Main Layers Panel Component ---
+export const LayersPanel: React.FC = () => {
+  const { state } = useAppState();
+  const { elements } = state;
 
-  const panelStyle: React.CSSProperties = { width: '240px', height: '100%', background: '#252627', color: '#ccc', padding: '8px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '14px', borderRight: '1px solid #444', display: 'flex', flexDirection: 'column' };
-  const titleStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', padding: '8px 8px 16px 8px', borderBottom: '1px solid #444', fontSize: '16px', display: 'flex', alignItems: 'center' };
-  const listStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: '8px 0', flex: 1, overflowY: 'auto' };
-  const itemBaseStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', padding: '8px', borderRadius: '4px', cursor: 'pointer', marginBottom: '4px', gap: '8px' };
-  const buttonStyle = (enabled: boolean): React.CSSProperties => ({ background: '#3a3d40', border: '1px solid #555', color: '#ccc', cursor: enabled ? 'pointer' : 'not-allowed', padding: '4px 8px', borderRadius: '4px', opacity: enabled ? 1 : 0.4 });
+  const sortedElements = useMemo(() => {
+    return Object.values(elements).sort((a, b) => b.zIndex - a.zIndex);
+  }, [elements]);
+
+  const topLevelItems = sortedElements.filter(el => !el.parentId);
 
   return (
     <div style={panelStyle}>
-      <div style={titleStyle}>
-        <span>Layers</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-          <button onClick={handleGroup} disabled={!canGroup} style={buttonStyle(canGroup)}>Group</button>
-          <button onClick={handleUngroup} disabled={!canUngroup} style={buttonStyle(canUngroup)}>Ungroup</button>
-        </div>
+      <div style={titleStyle}>Layers</div>
+      <div style={layerListStyle}>
+        {topLevelItems.length > 0 ? (
+          topLevelItems.map(element => (
+            <LayerItem
+              key={element.id}
+              element={element}
+              depth={0}
+              allElements={sortedElements}
+            />
+          ))
+        ) : (
+          <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Canvas is empty</p>
+        )}
       </div>
-      <ul style={listStyle}>
-        {sortedElements.map(element => {
-          const isSelected = selectedElementIds.includes(element.id);
-          const itemStyle: React.CSSProperties = { ...itemBaseStyle, background: isSelected ? 'rgba(0, 122, 255, 0.3)' : 'transparent', color: isSelected ? 'white' : '#ccc', opacity: element.isVisible ? 1 : 0.5, paddingLeft: element.parentId ? '24px' : '8px' };
-          return (
-            <li key={element.id} style={itemStyle} onClick={(e) => handleLayerClick(e, element.id)}>
-              <ElementIcon element={element} />
-              <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{element.id}</span>
-              <div onClick={(e) => handleVisibilityToggle(e, element)}>
-                <VisibilityIcon isVisible={element.isVisible} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 };

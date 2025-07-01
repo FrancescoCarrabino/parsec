@@ -62,4 +62,33 @@ class GroupElement(Element):
     element_type: Literal["group"] = "group"
 
 
-AnyElement = Union[ShapeElement, GroupElement]
+class TextElement(Element):
+    """Represents a text object on the canvas."""
+
+    id: str = Field(default_factory=lambda: generate_id("text"))
+    element_type: Literal["text"] = "text"
+    content: str = "Type something..."
+    fontFamily: str = "Inter"
+    fontSize: int = 16
+    fontColor: str = "#000000"
+    align: Literal["left", "center", "right"] = "left"
+    verticalAlign: Literal["top", "middle", "bottom"] = "top"
+    # Text elements have their width/height determined by content, so we make them optional
+    width: float = Field(default=150)  # A default width for new elements
+    height: float = Field(default=22)
+
+
+class FrameElement(Element):
+    id: str = Field(default_factory=lambda: generate_id("frame"))
+    element_type: Literal["frame"] = "frame"
+
+    # Frames have their own visual properties, just like shapes
+    fill: Fill = Field(default_factory=SolidFill)
+    stroke: str = "transparent"
+    stroke_width: int = 1
+
+    # The key property that defines a frame's behavior
+    clipsContent: bool = True
+
+
+AnyElement = Union[ShapeElement, FrameElement, GroupElement, TextElement]

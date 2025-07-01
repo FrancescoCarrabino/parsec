@@ -144,12 +144,59 @@ async def websocket_endpoint(
                     await manager.broadcast(json.dumps(update_command))
             elif msg_type == "create_element":
                 logger.info(f"Received direct command to create element: {payload}")
-                # The payload from the frontend will be the full element data
-                if payload.get("element_type") == "shape":
-                    # The create_shape tool now returns a command, so we can reuse it
-                    command = agent.canvas_agent.create_shape(**payload)
-                    await manager.broadcast(json.dumps(command))
 
+                # --- DIAGNOSTIC STEP 1: Check if element creation succeeds ---
+                new_element = workspace.create_element_from_payload(payload)
+                logger.info(f"WorkspaceService returned: {new_element}")
+
+                if new_element:
+                    # --- DIAGNOSTIC STEP 2: Check if data serialization succeeds ---
+                    try:
+                        element_data = new_element.model_dump()
+                        logger.info(
+                            f"Successfully dumped model to dict: {element_data}"
+                        )
+                    except Exception as e:
+                        logger.error(f"FAILED to dump Pydantic model to dict: {e}")
+                        element_data = None
+
+                    if element_data:
+                        response = {"type": "element_created", "payload": element_data}
+
+                        # --- DIAGNOSTIC STEP 3: Check the final JSON before broadcast ---
+                        try:
+                            json_response = json.dumps(response)
+                            logger.info(
+                                f"Broadcasting this JSON payload: {json_response}"
+                            )
+                        except Exception as e:
+                            logger.error(f"FAILED to serialize response to JSON: {e}")
+                            json_response = None
+
+                        if json_response:
+                            # --- DIAGNOSTIC STEP 4: The broadcast itself ---
+                            await manager.broadcast(json_response)
+                            logger.success(
+                                "<<< Broadcast command sent successfully to manager."
+                            )
+                else:
+                    logger.warning(
+                        "Element creation returned None, nothing to broadcast."
+                    )
+
+            elif msg_type == "reparent_element":
+                logger.info(
+                    f"Received direct command to reparent {payload['childId']} to {payload['newParentId']}"
+                )
+                affected_elements = workspace.reparent_element(
+                    payload["childId"], payload["newParentId"]
+                )
+                if affected_elements:
+                    update_command = {
+                        "type": "elements_updated",
+                        "payload": [el.model_dump() for el in affected_elements],
+                    }
+                    await manager.broadcast(json.dumps(update_command))
     except WebSocketDisconnect:
         logger.info(f"Client disconnected cleanly: {client_host}:{client_port}")
     except Exception as e:

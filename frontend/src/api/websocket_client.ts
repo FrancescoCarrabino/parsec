@@ -84,6 +84,10 @@ class WebSocketClient {
 	// --- ADD THIS NEW METHOD ---
 	public sendCreateElement(elementData: object) {
 		this.sendMessage({ type: "create_element", payload: elementData });
+
+	}
+	public sendReparentElement(childId: string, newParentId: string | null) {
+		this.sendMessage({ type: "reparent_element", payload: { childId, newParentId } });
 	}
 }
 

@@ -42,9 +42,9 @@ export const ShapeComponent: React.FC<ShapeComponentProps> = ({ element, onDragE
 			const points = getGradientPoints(gradient.angle, element.width, element.height);
 			return {
 				fill: null, // Konva requires 'fill' to be null when using gradients
-				fillGradientStart: points.start,
-				fillGradientEnd: points.end,
-				fillGradientColorStops: gradient.stops.flatMap(s => [s.offset, s.color]),
+				fillLinearGradientStartPoint: points.start,
+				fillLinearGradientEndPoint: points.end,
+				fillLinearGradientColorStops: gradient.stops.flatMap(s => [s.offset, s.color]),
 			};
 		}
 		return { fill: '#000000' };
