@@ -27,14 +27,15 @@ export interface BaseElement {
 	zIndex: number; isVisible: boolean;
 	parentId: string | null;
 	name: string;
+	cornerRadius?: number;
 }
 
 export interface ShapeElement extends BaseElement {
 	element_type: "shape";
 	shape_type: "rect" | "circle";
 	fill: Fill; // <-- UPDATED
-	stroke: string;
-	stroke_width: number;
+	stroke: Fill | null; // A stroke can be a Fill object or null
+	strokeWidth: number;
 }
 
 export interface GroupElement extends BaseElement {
@@ -52,9 +53,10 @@ export interface TextElement extends BaseElement {
 export interface FrameElement extends BaseElement {
 	element_type: 'frame';
 	fill: Fill;
-	stroke: string;
-	stroke_width: number;
+	stroke: Fill | null;
+	strokeWidth: number;
 	clipsContent: boolean;
+	cornerRadius?: number;
 }
 
 // --- UPDATE THE UNION TYPES ---

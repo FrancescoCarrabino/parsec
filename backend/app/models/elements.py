@@ -53,8 +53,9 @@ class ShapeElement(Element):
     shape_type: Literal["rect", "circle"]
     # The 'fill' property is now a complex object, defaulting to solid white.
     fill: Fill = Field(default_factory=SolidFill)
-    stroke: str = "black"
-    stroke_width: int = 0
+    stroke: Optional[Fill] = None  # The stroke can be any Fill type, or nothing
+    strokeWidth: float = 1
+    cornerRadius: float = 0
 
 
 class GroupElement(Element):
@@ -84,11 +85,14 @@ class FrameElement(Element):
 
     # Frames have their own visual properties, just like shapes
     fill: Fill = Field(default_factory=SolidFill)
-    stroke: str = "transparent"
-    stroke_width: int = 1
+    stroke: Optional[Fill] = Field(
+        default_factory=lambda: SolidFill(color="#888888")
+    )  # Default with a visible stroke
+    strokeWidth: float = 1
 
     # The key property that defines a frame's behavior
     clipsContent: bool = True
+    cornerRadius: float = 0
 
 
 AnyElement = Union[ShapeElement, FrameElement, GroupElement, TextElement]

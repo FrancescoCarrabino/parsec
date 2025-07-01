@@ -31,21 +31,19 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({ elementId, onD
 			return null;
 		case 'frame':
 			const frame = element as FrameElement;
-			// We only render the visual background of the frame here.
-			// The children will be rendered inside it by the main Canvas component.
-			// For now, we'll just show a semi-transparent rectangle.
-			// A more advanced implementation would use the frame's fill/stroke props.
+			// We can implement the same advanced stroke logic here if needed,
+			// for now, a simple version:
+			const frameStroke = frame.stroke && frame.stroke.type === 'solid' ? frame.stroke.color : 'transparent';
 			return (
 				<Rect
 					width={frame.width}
 					height={frame.height}
-					fill={frame.fill.type === 'solid' ? frame.fill.color : '#ffffff'} // Basic fill handling
-					stroke={frame.stroke}
-					strokeWidth={frame.stroke_width}
-				// We don't need Konva event handlers here as they are on the parent Group in Canvas.tsx
+					fill={frame.fill.type === 'solid' ? frame.fill.color : '#ffffff'}
+					stroke={frameStroke}
+					strokeWidth={frame.stroke ? frame.strokeWidth : 0}
+					cornerRadius={frame.cornerRadius || 0}
 				/>
 			);
-		// -------------------------
 		default:
 			return null;
 	}

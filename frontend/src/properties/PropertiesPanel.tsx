@@ -1,126 +1,172 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppState } from '../state/AppStateContext';
 import { webSocketClient } from '../api/websocket_client';
-import type { ShapeElement, TextElement, Fill } from '../state/types';
+import type { ShapeElement, TextElement, FrameElement, Fill, CanvasElement } from '../state/types';
 import { FillSection } from './FillSection';
 import { TextSection } from './TextSection';
+
+// --- STYLES (Moved to top level for accessibility by all components in this file) ---
+const panelStyle: React.CSSProperties = { width: '280px', height: '100%', background: '#252627', color: '#ccc', padding: '16px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '14px', zIndex: 10, borderLeft: '1px solid #444', overflowY: 'auto' };
+const sectionStyle: React.CSSProperties = { marginBottom: '20px', borderTop: '1px solid #444', paddingTop: '16px' };
+const titleStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', marginBottom: '10px', fontSize: '16px' };
+const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
+const labelStyle: React.CSSProperties = { color: '#aaa', fontSize: '12px', whiteSpace: 'nowrap' };
+const inputStyle: React.CSSProperties = { flex: 1, background: '#333', border: '1px solid #555', color: 'white', padding: '4px 8px', borderRadius: '4px', textAlign: 'right', marginLeft: '16px' };
+
+// --- REUSABLE COMPONENTS (Defined outside the main component for clarity and performance) ---
+const PropertyInput = ({ label, propName, type = 'number', localProps, handleLocalChange, commitChanges, handleKeyDown }: {
+  label: string,
+  propName: string,
+  type?: string,
+  localProps: any,
+  handleLocalChange: (prop: string, val: any) => void,
+  commitChanges: (prop: string) => void,
+  handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, prop: string) => void
+}) => {
+  if (!localProps) return null;
+  const value = localProps[propName] ?? (type === 'number' ? 0 : '');
+
+  return (
+    <div style={rowStyle}>
+      <label style={labelStyle}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => handleLocalChange(propName, type === 'number' ? e.target.valueAsNumber || 0 : e.target.value)}
+        onBlur={() => commitChanges(propName)}
+        onKeyDown={(e) => handleKeyDown(e, propName)}
+        style={inputStyle}
+      />
+    </div>
+  );
+};
+
+const ReorderButton = ({ children, onClick, title, disabled }: { children: React.ReactNode, onClick: () => void, title: string, disabled: boolean }) => (
+  <button onClick={onClick} title={title} disabled={disabled} style={{ background: '#3a3d40', border: '1px solid #555', color: '#ccc', padding: '8px', borderRadius: '4px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1, width: '100%' }}>{children}</button>
+);
+
 
 export const PropertiesPanel: React.FC = () => {
   const { state } = useAppState();
   const { elements, selectedElementIds } = state;
-
-  // Determine the single selected element, if any
   const selectedElement = selectedElementIds.length === 1 ? elements[selectedElementIds[0]] : null;
+  const [localProps, setLocalProps] = useState<CanvasElement | null>(null);
 
-  // Generic handler to send updates to the backend
-  const handlePropertyChange = (property: string, value: any) => {
-    if (!selectedElement) return;
+  useEffect(() => { setLocalProps(selectedElement); }, [selectedElement]);
+
+  const handleLocalChange = (property: string, value: any) => {
+    if (!localProps) return;
+    setLocalProps({ ...localProps, [property]: value });
+  };
+
+  const commitChanges = (property: string) => {
+    if (!selectedElement || !localProps) return;
+    if (selectedElement[property as keyof typeof selectedElement] !== localProps[property as keyof typeof localProps]) {
+      webSocketClient.sendElementUpdate({ id: selectedElement.id, [property]: localProps[property as keyof typeof localProps] });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, property: string) => {
+    if (e.key === 'Enter') { commitChanges(property); e.currentTarget.blur(); }
+  };
+
+  const handleImmediateChange = (property: string, value: any) => {
+    if (!selectedElement || !localProps) return;
+    setLocalProps({ ...localProps, [property]: value });
     webSocketClient.sendElementUpdate({ id: selectedElement.id, [property]: value });
   };
 
-  // Handler for reordering commands
   const handleReorder = (command: string) => {
     if (!selectedElement) return;
     webSocketClient.sendReorderElement(selectedElement.id, command);
   };
 
-  // --- STYLES ---
-  const panelStyle: React.CSSProperties = { width: '280px', height: '100%', background: '#252627', color: '#ccc', padding: '16px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '14px', zIndex: 10, borderLeft: '1px solid #444', overflowY: 'auto' };
-  const sectionStyle: React.CSSProperties = { marginBottom: '20px', borderTop: '1px solid #444', paddingTop: '16px' };
-  const titleStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', marginBottom: '10px', fontSize: '16px' };
-  const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
-  const labelStyle: React.CSSProperties = { color: '#aaa', fontSize: '12px' };
-  const inputStyle: React.CSSProperties = { width: '100px', background: '#333', border: '1px solid #555', color: 'white', padding: '4px 8px', borderRadius: '4px', textAlign: 'right' };
-
-  // --- REUSABLE COMPONENTS ---
-  const PropertyInput = ({ label, value, propName, type = 'number' }: { label: string, value: string | number, propName: string, type?: string }) => (
-    <div style={rowStyle}>
-      <label htmlFor={propName} style={labelStyle}>{label}</label>
-      <input
-        id={propName}
-        type={type}
-        value={value}
-        onChange={(e) => handlePropertyChange(propName, type === 'number' ? Number(e.target.value) : e.target.value)}
-        style={{ ...inputStyle, width: '100%' }}
-      />
-    </div>
-  );
-
-  const ReorderButton = ({ children, onClick, title }: { children: React.ReactNode, onClick: () => void, title: string }) => (
-    <button onClick={onClick} title={title} disabled={!selectedElement} style={{ background: '#3a3d40', border: '1px solid #555', color: '#ccc', padding: '8px', borderRadius: '4px', cursor: selectedElement ? 'pointer' : 'not-allowed', opacity: selectedElement ? 1 : 0.4, width: '100%' }}>
-      {children}
-    </button>
-  );
-
-  // --- RENDER LOGIC ---
-
-  // Handle the empty/multi-select state
-  if (!selectedElement) {
-    return (
-      <div style={panelStyle}>
-        <div style={titleStyle}>Properties</div>
-        <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>
-          {selectedElementIds.length > 1 ? `${selectedElementIds.length} elements selected` : 'No element selected.'}
-        </p>
-      </div>
-    );
+  if (!localProps) {
+    return <div style={panelStyle}><div style={titleStyle}>Properties</div><p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>{selectedElementIds.length > 1 ? `${selectedElementIds.length} elements selected` : 'No element selected.'}</p></div>;
   }
 
-  // Cast the element to specific types for easier access and type safety
-  const shapeElement = selectedElement.element_type === 'shape' ? selectedElement as ShapeElement : null;
-  const textElement = selectedElement.element_type === 'text' ? selectedElement as TextElement : null;
+  const shapeElement = localProps.element_type === 'shape' ? localProps as ShapeElement : null;
+  const textElement = localProps.element_type === 'text' ? localProps as TextElement : null;
+  const frameElement = localProps.element_type === 'frame' ? localProps as FrameElement : null;
+  const commonInputProps = { localProps, handleLocalChange, commitChanges, handleKeyDown };
 
   return (
     <div style={panelStyle}>
       <div style={{ ...titleStyle, paddingBottom: '8px' }}>
-        {selectedElement.name || selectedElement.element_type.charAt(0).toUpperCase() + selectedElement.element_type.slice(1)}
+        {localProps.name || localProps.element_type.charAt(0).toUpperCase() + localProps.element_type.slice(1)}
       </div>
 
-      {/* Common Properties */}
       <div style={{ ...sectionStyle, borderTop: 'none', paddingTop: '0' }}>
-        <PropertyInput label="Name" value={selectedElement.name || ''} propName="name" type="text" />
+        <PropertyInput label="Name" propName="name" type="text" {...commonInputProps} />
       </div>
 
       <div style={sectionStyle}>
         <div style={titleStyle}>Transform</div>
-        <PropertyInput label="X" value={Math.round(selectedElement.x)} propName="x" />
-        <PropertyInput label="Y" value={Math.round(selectedElement.y)} propName="y" />
-        <PropertyInput label="Width" value={Math.round(selectedElement.width)} propName="width" />
-        <PropertyInput label="Height" value={Math.round(selectedElement.height)} propName="height" />
-        <PropertyInput label="Rotation" value={Math.round(selectedElement.rotation)} propName="rotation" />
+        <PropertyInput label="X" propName="x" {...commonInputProps} />
+        <PropertyInput label="Y" propName="y" {...commonInputProps} />
+        <PropertyInput label="Width" propName="width" {...commonInputProps} />
+        <PropertyInput label="Height" propName="height" {...commonInputProps} />
+        <PropertyInput label="Rotation" propName="rotation" {...commonInputProps} />
       </div>
 
-      {/* Text-Specific Properties */}
       {textElement && (
         <div style={sectionStyle}>
           <div style={titleStyle}>Text</div>
-          <TextSection element={textElement} onPropertyChange={handlePropertyChange} />
+          <TextSection element={textElement} onPropertyChange={handleImmediateChange} />
         </div>
       )}
 
-      {/* Shape-Specific Properties */}
-      {shapeElement && (
+      {(shapeElement || frameElement) && (
         <>
           <div style={sectionStyle}>
             <div style={titleStyle}>Fill</div>
-            <FillSection element={shapeElement} onFillChange={(newFill: Fill) => handlePropertyChange('fill', newFill)} />
+            <FillSection element={shapeElement || frameElement} onFillChange={(newFill: Fill) => handleImmediateChange('fill', newFill)} />
           </div>
+
           <div style={sectionStyle}>
-            <div style={titleStyle}>Stroke</div>
-            <PropertyInput label="Color" value={shapeElement.stroke} propName="stroke" type="text" />
-            <PropertyInput label="Width" value={shapeElement.stroke_width} propName="stroke_width" />
+            <div style={{ ...rowStyle, marginBottom: '16px' }}>
+              <div style={titleStyle}>Stroke</div>
+              {(shapeElement || frameElement).stroke ? (
+                <button onClick={() => handleImmediateChange('stroke', null)} style={{ ...inputStyle, width: 'auto', flex: '0 1 auto', cursor: 'pointer', background: '#555' }}>Remove</button>
+              ) : (
+                <button onClick={() => handleImmediateChange('stroke', { type: 'solid', color: '#888888' })} style={{ ...inputStyle, width: 'auto', flex: '0 1 auto', cursor: 'pointer' }}>Add</button>
+              )}
+            </div>
+            {(shapeElement || frameElement).stroke && (
+              <>
+                <PropertyInput label="Width" propName="strokeWidth" {...commonInputProps} />
+                <FillSection
+                  element={{ ...(shapeElement || frameElement), fill: (shapeElement || frameElement).stroke! }}
+                  onFillChange={(newStrokeFill: Fill) => handleImmediateChange('stroke', newStrokeFill)}
+                />
+              </>
+            )}
+          </div>
+
+          <div style={sectionStyle}>
+            <div style={titleStyle}>Corners</div>
+            <PropertyInput label="Radius" propName="cornerRadius" {...commonInputProps} />
           </div>
         </>
       )}
 
-      {/* Arrange Properties */}
+      {frameElement && (
+        <div style={sectionStyle}>
+          <div style={titleStyle}>Frame</div>
+          <div style={rowStyle}>
+            <label style={labelStyle}>Clip content</label>
+            <input type="checkbox" checked={frameElement.clipsContent} onChange={(e) => handleImmediateChange('clipsContent', e.target.checked)} style={{ width: '20px', height: '20px' }} />
+          </div>
+        </div>
+      )}
+
       <div style={sectionStyle}>
         <div style={titleStyle}>Arrange</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          <ReorderButton onClick={() => handleReorder('BRING_FORWARD')} title="Bring Forward">Forward</ReorderButton>
-          <ReorderButton onClick={() => handleReorder('SEND_BACKWARD')} title="Send Backward">Backward</ReorderButton>
-          <ReorderButton onClick={() => handleReorder('BRING_TO_FRONT')} title="Bring to Front">To Front</ReorderButton>
-          <ReorderButton onClick={() => handleReorder('SEND_TO_BACK')} title="Send to Back">To Back</ReorderButton>
+          <ReorderButton onClick={() => handleReorder('BRING_FORWARD')} title="Bring Forward" disabled={!selectedElement} />
+          <ReorderButton onClick={() => handleReorder('SEND_BACKWARD')} title="Send Backward" disabled={!selectedElement} />
+          <ReorderButton onClick={() => handleReorder('BRING_TO_FRONT')} title="Bring to Front" disabled={!selectedElement} />
+          <ReorderButton onClick={() => handleReorder('SEND_TO_BACK')} title="Send to Back" disabled={!selectedElement} />
         </div>
       </div>
     </div>
