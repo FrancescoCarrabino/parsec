@@ -12,16 +12,14 @@ import { useDrawingTool } from '../hooks/useDrawingTool';
 import { usePenTool } from '../hooks/usePenTool';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
 import { usePathEditor } from '../hooks/usePathEditor';
-import { getGridStyles, GRID_CONFIG } from '../utils/gridUtils'; // <-- Import GRID_CONFIG
-import type  { Guide, SnapLine } from '../utils/snapUtils';
-import { getElementSnapLines, getGuides, getSnappedPosition } from '../utils/snapUtils';
-
+import { getGridStyles, GRID_CONFIG } from '../utils/gridUtils';
+import type { Guide, SnapLine } from '../utils/snapUtils';
+import { getElementSnapLines, getGuides } from '../utils/snapUtils';
 
 export const Canvas = () => {
   const { state, dispatch } = useAppState();
   const { elements, selectedElementIds, groupEditingId, activeTool, editingElementId } = state;
-  
-  // --- No changes to state derivation ---
+
   const editingTextNode = editingElementId ? state.elements[editingElementId] : null;
   const editingText = (editingTextNode?.element_type === 'text') ? editingTextNode as TextElement : null;
   const editingPathNode = editingElementId ? state.elements[editingElementId] : null;
@@ -35,25 +33,23 @@ export const Canvas = () => {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [stageScale, setStageScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-  // hooks
+  
   const drawingTool = useDrawingTool(activeTool);
   const penTool = usePenTool(activeTool, stageScale);
   const marqueeTool = useMarqueeSelect(activeTool, isPanning);
   const pathEditor = usePathEditor(editingPath, stageScale);
 
-  //grid
   const gridStyles = getGridStyles(stageScale, stagePos);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const staticSnapLines = useRef<{ vertical: any[], horizontal: any[] }>({ vertical: [], horizontal: [] });
+  const staticSnapLines = useRef<{ vertical: SnapLine[], horizontal: SnapLine[] }>({ vertical: [], horizontal: [] });
 
   const canvasContainerStyle: React.CSSProperties = {
-    flex: 1,
-    position: 'relative',
-    background: '#333639',
-    overflow: 'hidden',
-    ...gridStyles,
+    flex: 1, position: 'relative', background: '#333639',
+    overflow: 'hidden', ...gridStyles,
   };
-  
+
+  const SNAP_THRESHOLD = 5;
+
 
   // Keyboard shortcuts effect
   useEffect(() => {
@@ -90,74 +86,131 @@ export const Canvas = () => {
   useEffect(() => { if (editingText && textareaRef.current) { textareaRef.current.focus(); } }, [editingText]);
 
   // HANDLERS
+    // --- PREPARE STATIC LINES FOR SNAPPING (DRAG OR TRANSFORM) ---
+    const prepareStaticSnapLines = () => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      
+      // Find all nodes that are NOT part of the current selection/transform
+      const staticNodes = stage.find('.element').filter(node => !selectedElementIds.includes(node.id()));
 
+      const lines = { vertical: [] as SnapLine[], horizontal: [] as SnapLine[] };
+      staticNodes.forEach(node => {
+          const nodeLines = getElementSnapLines(node);
+          lines.vertical.push(...nodeLines.vertical);
+          lines.horizontal.push(...nodeLines.horizontal);
+      });
+      staticSnapLines.current = lines;
+  };
+
+  // --- DRAG HANDLERS ---
   const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    // Pre-calculate snap lines for all non-dragged elements.
-    const staticNodes = stage.find('.element').filter(node => !node.isDragging());
-    const lines = { vertical: [] as SnapLine[], horizontal: [] as SnapLine[] };
-    staticNodes.forEach(node => {
-        const nodeLines = getElementSnapLines(node);
-        lines.vertical.push(...nodeLines.vertical);
-        lines.horizontal.push(...nodeLines.horizontal);
-    });
-    staticSnapLines.current = lines;
+      prepareStaticSnapLines();
   };
 
   const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    const draggedNode = e.target;
-    const draggedLines = getElementSnapLines(draggedNode);
-    
-    // Find smart guides by comparing dragged element to static elements.
-    const activeGuides = getGuides(draggedLines, staticSnapLines.current);
-    
-    // Snap-to-Grid logic
-    let finalPos = { x: draggedNode.x(), y: draggedNode.y() };
-    const gridSize = GRID_CONFIG.BASE_SIZE; // Use the base grid size for snapping
-    
-    // If no smart guides are active, try to snap to the grid.
-    if (activeGuides.vertical.length === 0) {
-        const snappedX = Math.round(draggedNode.x() / gridSize) * gridSize;
-        if (Math.abs(snappedX - draggedNode.x()) < 5) {
-             finalPos.x = snappedX;
-        }
-    } else {
-        finalPos.x += activeGuides.vertical[0].offset;
-    }
-
-    if (activeGuides.horizontal.length === 0) {
-        const snappedY = Math.round(draggedNode.y() / gridSize) * gridSize;
-        if (Math.abs(snappedY - draggedNode.y()) < 5) {
-            finalPos.y = snappedY;
-        }
-    } else {
-        finalPos.y += activeGuides.horizontal[0].offset;
-    }
-
-    draggedNode.position(finalPos);
-    setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
+      const draggedNode = e.target;
+      const draggedLines = getElementSnapLines(draggedNode);
+      const activeGuides = getGuides(draggedLines, staticSnapLines.current);
+      
+      let finalPos = { x: draggedNode.x(), y: draggedNode.y() };
+      const verticalGuide = activeGuides.vertical.length > 0 ? activeGuides.vertical[0] : null;
+      if (verticalGuide) { finalPos.x += verticalGuide.offset; }
+      
+      const horizontalGuide = activeGuides.horizontal.length > 0 ? activeGuides.horizontal[0] : null;
+      if (horizontalGuide) { finalPos.y += horizontalGuide.offset; }
+      
+      draggedNode.position(finalPos);
+      setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
   };
 
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    // Send the final, snapped position to the backend.
-    webSocketClient.sendElementUpdate({ 
-        id: e.target.id(), 
-        x: e.target.x(), 
-        y: e.target.y() 
-    });
-    // Clear the visual guides.
-    setGuides([]);
+      webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+      setGuides([]);
+  };
+  
+  // --- TRANSFORM HANDLERS ---
+  const handleTransformStart = () => {
+      prepareStaticSnapLines();
   };
 
-  // The old, simple drag end handler. We keep it for elements where we don't apply snapping (inside groups).
-  const handleSimpleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    e.cancelBubble = true;
-    webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+  const handleTransform = (e: KonvaEventObject<Event>) => {
+      const node = e.target;
+      // During transform, Konva sets scale and position. We will override this if we snap.
+      node.setAttrs({
+          width: node.width() * node.scaleX(),
+          height: node.height() * node.scaleY(),
+          scaleX: 1,
+          scaleY: 1,
+      });
+
+      const transformedLines = getElementSnapLines(node);
+      const activeGuides = getGuides(transformedLines, staticSnapLines.current);
+
+      if (activeGuides.vertical.length > 0 || activeGuides.horizontal.length > 0) {
+          activeGuides.vertical.forEach(guide => {
+              const absPos = node.getAbsolutePosition();
+              const nodeBox = getElementSnapLines(node); // Bbox of the transforming node
+
+              // Find which edge is snapping
+              const isLeftEdge = Math.abs(nodeBox.vertical[0].value - guide.snap) < 1;
+              const isRightEdge = Math.abs(nodeBox.vertical[2].value - guide.snap) < 1;
+
+              if (isLeftEdge) {
+                  // Move the node's x position and adjust width to keep the right edge stationary
+                  const dx = guide.snap - absPos.x;
+                  const newWidth = node.width() - dx;
+                  node.width(newWidth);
+                  node.x(node.x() + dx);
+              } else if (isRightEdge) {
+                  // Adjust width to align the right edge
+                  node.width(guide.snap - absPos.x);
+              }
+          });
+
+          activeGuides.horizontal.forEach(guide => {
+              const absPos = node.getAbsolutePosition();
+              const nodeBox = getElementSnapLines(node);
+
+              const isTopEdge = Math.abs(nodeBox.horizontal[0].value - guide.snap) < 1;
+              const isBottomEdge = Math.abs(nodeBox.horizontal[2].value - guide.snap) < 1;
+
+              if (isTopEdge) {
+                  const dy = guide.snap - absPos.y;
+                  const newHeight = node.height() - dy;
+                  node.height(newHeight);
+                  node.y(node.y() + dy);
+              } else if (isBottomEdge) {
+                  node.height(guide.snap - absPos.y);
+              }
+          });
+      }
+      
+      setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
+  };
+
+  const handleTransformEnd = (e: KonvaEventObject<Event>) => {
+      const node = e.target;
+      const element = elements[node.id()];
+      if (!element) return;
+      
+      // We no longer need to calculate scale here, as we flattened it during transform
+      const updatePayload: any = {
+          id: element.id,
+          x: node.x(),
+          y: node.y(),
+          rotation: Math.round(node.rotation()),
+          width: node.width(),
+          height: node.height(),
+      };
+
+      if (element.element_type === 'path') {
+          // Path scaling still needs to be handled differently
+          // This logic might need refinement if paths are transformable
+      }
+      
+      webSocketClient.sendElementUpdate(updatePayload);
+      setGuides([]); // Clear guides at the end
   };
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     // Handle the "click-to-create" Text tool first.
@@ -245,17 +298,6 @@ export const Canvas = () => {
   const handleElementDragEnd = (e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
     webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
-  };
-
-  const handleTransformEnd = (e: KonvaEventObject<Event>) => {
-    const node = e.target; const element = elements[node.id()]; if (!element) return;
-    const scaleX = node.scaleX(); const scaleY = node.scaleY();
-    node.scaleX(1); node.scaleY(1);
-    const updatePayload: any = { id: element.id, x: node.x(), y: node.y(), rotation: Math.round(node.rotation()), width: Math.max(5, element.width * scaleX), height: Math.max(5, element.height * scaleY) };
-    if (element.element_type === 'path') {
-      updatePayload.points = element.points.map(p => ({ ...p, x: p.x * scaleX, y: p.y * scaleY, handleIn: p.handleIn ? { x: p.handleIn.x * scaleX, y: p.handleIn.y * scaleY } : undefined, handleOut: p.handleOut ? { x: p.handleOut.x * scaleX, y: p.handleOut.y * scaleY } : undefined }));
-    }
-    webSocketClient.sendElementUpdate(updatePayload);
   };
 
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => { e.evt.preventDefault(); const stage = stageRef.current; if (!stage) return; const scaleBy = 1.1; const oldScale = stage.scaleX(); const pointer = stage.getPointerPosition(); if (!pointer) return; const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale }; const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy; setStageScale(newScale); setStagePos({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale }); };
@@ -357,17 +399,61 @@ const topLevelElements = Object.values(elements).filter(el => !el.parentId).sort
 
 return (
   <div style={canvasContainerStyle}>
-    <Stage ref={stageRef} onDblClick={handleDblClick} onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel} width={window.innerWidth - 520} height={window.innerHeight} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning}>
+    <Stage
+      ref={stageRef}
+      onDblClick={handleDblClick}
+      onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
+      width={window.innerWidth - 520}
+      height={window.innerHeight}
+      // These props affect the main stage and all children by default.
+      scaleX={stageScale}
+      scaleY={stageScale}
+      x={stagePos.x}
+      y={stagePos.y}
+      draggable={isPanning}
+    >
+      {/* LAYER 1: The Main Content Layer. Inherits stage transforms. */}
       <Layer>
-        {renderElements(topLevelElements)}
-        {drawingTool.preview}
-        {marqueeTool.preview}
-        {penTool.preview}
-        {pathEditor.editUI}
-        <Transformer ref={transformerRef} onTransformEnd={handleTransformEnd} boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox} ignoreStroke={true} />
-      </Layer>
-      <Layer name="guides-layer">
-          {guides.map((guide, i) => ( <Line key={i} points={guide.line} stroke="#FF0000" strokeWidth={1/stageScale} dash={[4, 6]} listening={false} /> ))}
+                    {renderElements(topLevelElements)}
+                    {drawingTool.preview}
+                    {marqueeTool.preview}
+                    {pathEditor.editUI}
+                    {/* --- UPDATED TRANSFORMER PROPS --- */}
+                    <Transformer
+                        ref={transformerRef}
+                        onTransformStart={handleTransformStart}
+                        onTransform={handleTransform}
+                        onTransformEnd={handleTransformEnd}
+                        boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox}
+                        ignoreStroke={true}
+                    />
+                </Layer>
+      
+      {/* --- THE FIX: LAYER 2: The UI Overlay Layer --- */}
+      {/* This layer will contain UI that should NOT pan or zoom, like our guides. */}
+      <Layer 
+        name="guides-layer"
+        // We explicitly counteract the stage's transforms to keep this layer static.
+        // This ensures that World Space coordinates render correctly.
+        x={-stagePos.x / stageScale}
+        y={-stagePos.y / stageScale}
+        scaleX={1 / stageScale}
+        scaleY={1 / stageScale}
+      >
+        {guides.map((guide, i) => (
+          <Line
+            key={i}
+            points={guide.line} // Now these World Space points will render correctly
+            stroke="#FF0000"
+            strokeWidth={1} // The stroke is now in a 1:1 scale layer, so we don't divide by stageScale
+            dash={[4, 6]}
+            listening={false}
+          />
+        ))}
       </Layer>
     </Stage>
     {editingText && ( <textarea ref={textareaRef} style={getEditingTextareaStyle()} defaultValue={editingText.content} onBlur={handleTextareaBlur} onKeyDown={handleTextareaKeyDown} /> )}

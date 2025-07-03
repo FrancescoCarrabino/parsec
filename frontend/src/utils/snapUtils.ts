@@ -39,21 +39,33 @@ export interface Guide {
  * @returns An object containing arrays of vertical and horizontal SnapLines.
  */
 export const getElementSnapLines = (element: Konva.Node): { vertical: SnapLine[], horizontal: SnapLine[] } => {
-  const box = element.getClientRect(); // Use client rect for absolute coordinates on canvas
+    // node.getAbsolutePosition() returns the position of the node relative to the top-left
+    // of the stage container. This is the true "World Space" position.
+    const pos = element.getAbsolutePosition();
+    
+    // We need the scaled width and height of the element.
+    const width = element.width() * element.scaleX();
+    const height = element.height() * element.scaleY();
   
-  return {
-    vertical: [
-      { value: box.x, orientation: 'V', snapPoints: [box.y, box.y + box.height] },
-      { value: box.x + box.width / 2, orientation: 'V', snapPoints: [box.y, box.y + box.height] },
-      { value: box.x + box.width, orientation: 'V', snapPoints: [box.y, box.y + box.height] },
-    ],
-    horizontal: [
-      { value: box.y, orientation: 'H', snapPoints: [box.x, box.x + box.width] },
-      { value: box.y + box.height / 2, orientation: 'H', snapPoints: [box.x, box.x + box.width] },
-      { value: box.y + box.height, orientation: 'H', snapPoints: [box.x, box.x + box.width] },
-    ],
+    // Note: This logic assumes non-rotated rectangles. For rotated elements,
+    // we would need to calculate the bounding box of the rotated vertices.
+    // For this version, we will proceed with the non-rotated bounding box.
+    const x = pos.x;
+    const y = pos.y;
+    
+    return {
+      vertical: [
+        { value: x, orientation: 'V', snapPoints: [y, y + height] },
+        { value: x + width / 2, orientation: 'V', snapPoints: [y, y + height] },
+        { value: x + width, orientation: 'V', snapPoints: [y, y + height] },
+      ],
+      horizontal: [
+        { value: y, orientation: 'H', snapPoints: [x, x + width] },
+        { value: y + height / 2, orientation: 'H', snapPoints: [x, x + width] },
+        { value: y + height, orientation: 'H', snapPoints: [x, x + width] },
+      ],
+    };
   };
-};
 
 /**
  * The main snapping engine.
@@ -64,67 +76,66 @@ export const getElementSnapLines = (element: Konva.Node): { vertical: SnapLine[]
  * @returns An object with the best snapping guides found for vertical and horizontal orientations.
  */
 export const getGuides = (
-  draggedLines: { vertical: SnapLine[], horizontal: SnapLine[] },
-  targetLines: { vertical: SnapLine[], horizontal: SnapLine[] }
-): { vertical: Guide[], horizontal: Guide[] } => {
-  const result: { vertical: Guide[], horizontal: Guide[] } = { vertical: [], horizontal: [] };
-
-  // --- Find best vertical snap ---
-  let minV = Infinity;
-  for (const dragged of draggedLines.vertical) {
-    for (const target of targetLines.vertical) {
-      const diff = Math.abs(dragged.value - target.value);
-      if (diff < minV) {
-        minV = diff;
-      }
-    }
-  }
-
-  if (minV < SNAP_THRESHOLD) {
+    draggedLines: { vertical: SnapLine[], horizontal: SnapLine[] },
+    targetLines: { vertical: SnapLine[], horizontal: SnapLine[] }
+  ): { vertical: Guide[], horizontal: Guide[] } => {
+    const result: { vertical: Guide[], horizontal: Guide[] } = { vertical: [], horizontal: [] };
+    let minV = Infinity;
     for (const dragged of draggedLines.vertical) {
       for (const target of targetLines.vertical) {
         const diff = Math.abs(dragged.value - target.value);
-        if (diff < SNAP_THRESHOLD) {
-          result.vertical.push({
-            line: [target.value, ...target.snapPoints, target.value, ...dragged.snapPoints],
-            snap: target.value,
-            offset: target.value - dragged.value,
-            orientation: 'V',
-          });
+        if (diff < minV) { minV = diff; }
+      }
+    }
+  
+    if (minV < SNAP_THRESHOLD) {
+      for (const dragged of draggedLines.vertical) {
+        for (const target of targetLines.vertical) {
+          const diff = Math.abs(dragged.value - target.value);
+          if (diff < SNAP_THRESHOLD) {
+              // Find the union of the two lines to draw the guide
+              const allPoints = [...target.snapPoints, ...dragged.snapPoints];
+              const minPoint = Math.min(...allPoints);
+              const maxPoint = Math.max(...allPoints);
+            result.vertical.push({
+              line: [target.value, minPoint, target.value, maxPoint],
+              snap: target.value,
+              offset: target.value - dragged.value,
+              orientation: 'V',
+            });
+          }
         }
       }
     }
-  }
-
-  // --- Find best horizontal snap ---
-  let minH = Infinity;
-  for (const dragged of draggedLines.horizontal) {
-    for (const target of targetLines.horizontal) {
-      const diff = Math.abs(dragged.value - target.value);
-      if (diff < minH) {
-        minH = diff;
-      }
-    }
-  }
-
-  if (minH < SNAP_THRESHOLD) {
+  
+    let minH = Infinity;
     for (const dragged of draggedLines.horizontal) {
       for (const target of targetLines.horizontal) {
         const diff = Math.abs(dragged.value - target.value);
-        if (diff < SNAP_THRESHOLD) {
-          result.horizontal.push({
-            line: [...target.snapPoints, target.value, ...dragged.snapPoints, target.value],
-            snap: target.value,
-            offset: target.value - dragged.value,
-            orientation: 'H',
-          });
+        if (diff < minH) { minH = diff; }
+      }
+    }
+  
+    if (minH < SNAP_THRESHOLD) {
+      for (const dragged of draggedLines.horizontal) {
+        for (const target of targetLines.horizontal) {
+          const diff = Math.abs(dragged.value - target.value);
+          if (diff < SNAP_THRESHOLD) {
+              const allPoints = [...target.snapPoints, ...dragged.snapPoints];
+              const minPoint = Math.min(...allPoints);
+              const maxPoint = Math.max(...allPoints);
+            result.horizontal.push({
+              line: [minPoint, target.value, maxPoint, target.value],
+              snap: target.value,
+              offset: target.value - dragged.value,
+              orientation: 'H',
+            });
+          }
         }
       }
     }
-  }
-
-  return result;
-};
+    return result;
+  };
 
 
 /**
