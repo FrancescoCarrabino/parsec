@@ -7,16 +7,17 @@ import { applyFillToProps } from '../../utils/pathUtils';
 
 interface ShapeComponentProps {
   element: ShapeElement;
+  isVisible: boolean;
+  onDragStart: (e: KonvaEventObject<DragEvent>) => void;
+  onDragMove: (e: KonvaEventObject<DragEvent>) => void;
   onDragEnd: (e: KonvaEventObject<DragEvent>) => void;
   onDblClick: (e: KonvaEventObject<MouseEvent>) => void;
 }
 
-export const ShapeComponent: React.FC<ShapeComponentProps> = ({ element, onDragEnd, onDblClick }) => {
+export const ShapeComponent: React.FC<ShapeComponentProps> = ({ element, isVisible, onDragStart, onDragMove, onDragEnd, onDblClick }) => {
   const { state } = useAppState();
   const { groupEditingId } = state;
-
   const isDraggable = !element.parentId || (groupEditingId === element.parentId);
-
   const konvaProps = useMemo(() => {
     const props: any = {};
     const { fill, stroke, strokeWidth, width, height, cornerRadius } = element;
@@ -27,11 +28,14 @@ export const ShapeComponent: React.FC<ShapeComponentProps> = ({ element, onDragE
   }, [element.fill, element.stroke, element.strokeWidth, element.cornerRadius, element.width, element.height]);
 
   const commonProps = {
-    id: element.id, name: element.id, // Assign name for event delegation
+    id: element.id, name: `${element.id} element`,
     x: element.x, y: element.y,
     width: element.width, height: element.height,
     rotation: element.rotation,
     draggable: isDraggable,
+    visible: isVisible,
+    onDragStart: isDraggable ? onDragStart : undefined,
+    onDragMove: isDraggable ? onDragMove : undefined,
     onDragEnd: isDraggable ? onDragEnd : undefined,
     onDblClick: onDblClick,
     ...konvaProps,

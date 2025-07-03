@@ -1,7 +1,7 @@
 // parsec-frontend/src/canvas/Canvas.tsx
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Stage, Layer, Transformer, Group as KonvaGroup } from 'react-konva';
+import { Stage, Layer, Transformer, Group as KonvaGroup, Line } from 'react-konva';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { useAppState } from '../state/AppStateContext';
@@ -12,16 +12,18 @@ import { useDrawingTool } from '../hooks/useDrawingTool';
 import { usePenTool } from '../hooks/usePenTool';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
 import { usePathEditor } from '../hooks/usePathEditor';
+import { getGridStyles, GRID_CONFIG } from '../utils/gridUtils'; // <-- Import GRID_CONFIG
+import type  { Guide, SnapLine } from '../utils/snapUtils';
+import { getElementSnapLines, getGuides, getSnappedPosition } from '../utils/snapUtils';
+
 
 export const Canvas = () => {
   const { state, dispatch } = useAppState();
-  // --- REFACTORED: Get editing ID from global state ---
   const { elements, selectedElementIds, groupEditingId, activeTool, editingElementId } = state;
-
-  // --- REFACTORED: Derive the "editing" objects from the global state on every render ---
+  
+  // --- No changes to state derivation ---
   const editingTextNode = editingElementId ? state.elements[editingElementId] : null;
   const editingText = (editingTextNode?.element_type === 'text') ? editingTextNode as TextElement : null;
-
   const editingPathNode = editingElementId ? state.elements[editingElementId] : null;
   const editingPath = (editingPathNode?.element_type === 'path') ? editingPathNode as PathElement : null;
 
@@ -33,14 +35,25 @@ export const Canvas = () => {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [stageScale, setStageScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-
-  // --- REFACTORED: Remove local useState for editingText and editingPath ---
-
+  // hooks
   const drawingTool = useDrawingTool(activeTool);
   const penTool = usePenTool(activeTool, stageScale);
   const marqueeTool = useMarqueeSelect(activeTool, isPanning);
-  // --- REFACTORED: Pass the derived editingPath and remove the setter ---
   const pathEditor = usePathEditor(editingPath, stageScale);
+
+  //grid
+  const gridStyles = getGridStyles(stageScale, stagePos);
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const staticSnapLines = useRef<{ vertical: any[], horizontal: any[] }>({ vertical: [], horizontal: [] });
+
+  const canvasContainerStyle: React.CSSProperties = {
+    flex: 1,
+    position: 'relative',
+    background: '#333639',
+    overflow: 'hidden',
+    ...gridStyles,
+  };
+  
 
   // Keyboard shortcuts effect
   useEffect(() => {
@@ -76,6 +89,76 @@ export const Canvas = () => {
   // Textarea focus effect
   useEffect(() => { if (editingText && textareaRef.current) { textareaRef.current.focus(); } }, [editingText]);
 
+  // HANDLERS
+
+  const handleDragStart = (e: KonvaEventObject<DragEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    // Pre-calculate snap lines for all non-dragged elements.
+    const staticNodes = stage.find('.element').filter(node => !node.isDragging());
+    const lines = { vertical: [] as SnapLine[], horizontal: [] as SnapLine[] };
+    staticNodes.forEach(node => {
+        const nodeLines = getElementSnapLines(node);
+        lines.vertical.push(...nodeLines.vertical);
+        lines.horizontal.push(...nodeLines.horizontal);
+    });
+    staticSnapLines.current = lines;
+  };
+
+  const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    const draggedNode = e.target;
+    const draggedLines = getElementSnapLines(draggedNode);
+    
+    // Find smart guides by comparing dragged element to static elements.
+    const activeGuides = getGuides(draggedLines, staticSnapLines.current);
+    
+    // Snap-to-Grid logic
+    let finalPos = { x: draggedNode.x(), y: draggedNode.y() };
+    const gridSize = GRID_CONFIG.BASE_SIZE; // Use the base grid size for snapping
+    
+    // If no smart guides are active, try to snap to the grid.
+    if (activeGuides.vertical.length === 0) {
+        const snappedX = Math.round(draggedNode.x() / gridSize) * gridSize;
+        if (Math.abs(snappedX - draggedNode.x()) < 5) {
+             finalPos.x = snappedX;
+        }
+    } else {
+        finalPos.x += activeGuides.vertical[0].offset;
+    }
+
+    if (activeGuides.horizontal.length === 0) {
+        const snappedY = Math.round(draggedNode.y() / gridSize) * gridSize;
+        if (Math.abs(snappedY - draggedNode.y()) < 5) {
+            finalPos.y = snappedY;
+        }
+    } else {
+        finalPos.y += activeGuides.horizontal[0].offset;
+    }
+
+    draggedNode.position(finalPos);
+    setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
+  };
+
+  const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
+    // Send the final, snapped position to the backend.
+    webSocketClient.sendElementUpdate({ 
+        id: e.target.id(), 
+        x: e.target.x(), 
+        y: e.target.y() 
+    });
+    // Clear the visual guides.
+    setGuides([]);
+  };
+
+  // The old, simple drag end handler. We keep it for elements where we don't apply snapping (inside groups).
+  const handleSimpleDragEnd = (e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+  };
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     // Handle the "click-to-create" Text tool first.
     if (activeTool === 'text') {
@@ -222,37 +305,72 @@ export const Canvas = () => {
   };
   const renderElements = (elementList: CanvasElement[]): React.ReactNode[] => {
     return elementList.map(element => {
-      if (element.element_type === 'group' || element.element_type === 'frame') {
-        const children = Object.values(elements).filter(el => el.parentId === element.id).sort((a, b) => a.zIndex - b.zIndex);
-        const isGroupDraggable = (!element.parentId && !editingPath) || (groupEditingId === element.parentId);
-        const clipFunc = (element.element_type === 'frame' && element.clipsContent) ? (ctx: Konva.Context) => { ctx.rect(0, 0, element.width, element.height); } : undefined;
-        return (
-          <KonvaGroup key={element.id} id={element.id} name={element.id} x={element.x} y={element.y} rotation={element.rotation} draggable={isGroupDraggable} onDragEnd={handleElementDragEnd} clipFunc={clipFunc} onDblClick={handleDblClick}>
-            <ElementRenderer elementId={element.id} isVisible={true} onDblClick={handleDblClick} onDragEnd={handleElementDragEnd} />
-            {renderElements(children)}
-          </KonvaGroup>
-        );
-      }
-      const isVisible = editingElementId !== element.id;
-      return <ElementRenderer key={element.id} elementId={element.id} isVisible={isVisible} onDblClick={handleDblClick} onDragEnd={handleElementDragEnd} />;
-    });
-  };
-  const topLevelElements = Object.values(elements).filter(el => !el.parentId).sort((a, b) => a.zIndex - b.zIndex);
+        // --- GROUP / FRAME LOGIC ---
+        if (element.element_type === 'group' || element.element_type === 'frame') {
+            const children = Object.values(elements).filter(el => el.parentId === element.id).sort((a, b) => a.zIndex - b.zIndex);
+            const isGroupDraggable = !element.parentId || (groupEditingId === element.parentId);
+            const clipFunc = (element.element_type === 'frame' && element.clipsContent) ? (ctx: Konva.Context) => { ctx.rect(0, 0, element.width, element.height); } : undefined;
+            return (
+                <KonvaGroup
+                    key={element.id} id={element.id} name={`${element.id} element`}
+                    x={element.x} y={element.y} rotation={element.rotation}
+                    draggable={isGroupDraggable}
+                    // Groups and Frames get the full snapping handlers
+                    onDragStart={handleDragStart}
+                    onDragMove={handleDragMove}
+                    onDragEnd={handleDragEnd}
+                    clipFunc={clipFunc}
+                    onDblClick={handleDblClick}
+                >
+                    {/* The frame's background itself is not draggable */}
+                    <ElementRenderer
+                        elementId={element.id}
+                        isVisible={true}
+                        onDblClick={handleDblClick}
+                        onDragStart={() => {}} // No-op for non-draggable part
+                        onDragMove={() => {}}  // No-op
+                        onDragEnd={() => {}}    // No-op
+                    />
+                    {/* The children inside the group are rendered recursively */}
+                    {renderElements(children)}
+                </KonvaGroup>
+            );
+        }
 
-  return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Stage ref={stageRef} onDblClick={handleDblClick} onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel} width={window.innerWidth - 520} height={window.innerHeight} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning}>
-        <Layer>
-          {renderElements(topLevelElements)}
-          {drawingTool.preview}
-          {marqueeTool.preview}
-          {penTool.preview}
-          {pathEditor.editUI}
-          <Transformer ref={transformerRef} onTransformEnd={handleTransformEnd} boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox} ignoreStroke={true} />
-        </Layer>
-      </Stage>
-      {/* --- REFACTORED: Use derived editingText object --- */}
-      {editingText && stageRef.current && (<textarea ref={textareaRef} style={getEditingTextareaStyle()} defaultValue={editingText.content} onBlur={handleTextareaBlur} onKeyDown={handleTextareaKeyDown} />)}
-    </div>
-  );
+        // --- TOP-LEVEL ELEMENT LOGIC ---
+        const isVisible = editingElementId !== element.id;
+        // Top-level elements also get the full snapping handlers
+        return (
+            <ElementRenderer
+                key={element.id}
+                elementId={element.id}
+                isVisible={isVisible}
+                onDblClick={handleDblClick}
+                onDragStart={handleDragStart}
+                onDragMove={handleDragMove}
+                onDragEnd={handleDragEnd}
+            />
+        );
+    });
+};
+const topLevelElements = Object.values(elements).filter(el => !el.parentId).sort((a, b) => a.zIndex - b.zIndex);
+
+return (
+  <div style={canvasContainerStyle}>
+    <Stage ref={stageRef} onDblClick={handleDblClick} onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel} width={window.innerWidth - 520} height={window.innerHeight} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning}>
+      <Layer>
+        {renderElements(topLevelElements)}
+        {drawingTool.preview}
+        {marqueeTool.preview}
+        {penTool.preview}
+        {pathEditor.editUI}
+        <Transformer ref={transformerRef} onTransformEnd={handleTransformEnd} boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox} ignoreStroke={true} />
+      </Layer>
+      <Layer name="guides-layer">
+          {guides.map((guide, i) => ( <Line key={i} points={guide.line} stroke="#FF0000" strokeWidth={1/stageScale} dash={[4, 6]} listening={false} /> ))}
+      </Layer>
+    </Stage>
+    {editingText && ( <textarea ref={textareaRef} style={getEditingTextareaStyle()} defaultValue={editingText.content} onBlur={handleTextareaBlur} onKeyDown={handleTextareaKeyDown} /> )}
+  </div>
+);
 };
