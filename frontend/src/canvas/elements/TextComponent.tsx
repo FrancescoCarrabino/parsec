@@ -1,3 +1,5 @@
+// parsec-frontend/src/canvas/elements/TextComponent.tsx
+
 import React from 'react';
 import { Text } from 'react-konva';
 import { KonvaEventObject } from 'konva/lib/Node';
@@ -21,17 +23,22 @@ export const TextComponent: React.FC<TextComponentProps> = ({ element, isVisible
       id={element.id} name={element.id}
       x={element.x} y={element.y}
       width={element.width} height={element.height}
-      text={element.content}
-      fontSize={element.fontSize}
-      fontFamily={element.fontFamily}
-      fill={element.fontColor}
-      align={element.align}
-      verticalAlign={element.verticalAlign}
       rotation={element.rotation}
       draggable={isDraggable}
       onDragEnd={isDraggable ? onDragEnd : undefined}
       onDblClick={onDblClick}
       visible={isVisible}
+
+      // --- APPLY ALL NEW TEXT PROPERTIES ---
+      text={element.content}
+      fontSize={element.fontSize}
+      fontFamily={element.fontFamily}
+      fontWeight={element.fontWeight} // ADDED
+      fill={element.fontColor}
+      align={element.align}
+      verticalAlign={element.verticalAlign}
+      letterSpacing={element.letterSpacing} // ADDED
+      lineHeight={element.lineHeight}       // ADDED
     />
   );
 };

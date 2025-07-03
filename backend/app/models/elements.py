@@ -45,7 +45,6 @@ class Element(BaseModel):
     name: str = ""
 
 
-# --- NEW: Path point models ---
 class PathControlPoint(BaseModel):
     x: float
     y: float
@@ -59,7 +58,6 @@ class PathPoint(BaseModel):
     handleType: Literal["symmetrical", "asymmetrical", "disconnected"] = "symmetrical"
 
 
-# --- UPDATED element models ---
 class ShapeElement(Element):
     id: str = Field(default_factory=lambda: generate_id("shape"))
     element_type: Literal["shape"] = "shape"
@@ -75,13 +73,17 @@ class GroupElement(Element):
     element_type: Literal["group"] = "group"
 
 
+# --- THIS IS THE UPDATED MODEL ---
 class TextElement(Element):
     id: str = Field(default_factory=lambda: generate_id("text"))
-    element_type: Literal["text"]
+    element_type: Literal["text"] = "text" # Corrected from just "text"
     content: str = "Type something..."
-    fontFamily: str = "Inter"
+    fontFamily: str = "Inter" # A better, professional default
     fontSize: int = 16
+    fontWeight: int = 400 # Added: Maps to "Regular"
     fontColor: str = "#000000"
+    letterSpacing: float = 0 # Added
+    lineHeight: float = 1.2 # Added
     align: Literal["left", "center", "right"] = "left"
     verticalAlign: Literal["top", "middle", "bottom"] = "top"
     width: float = Field(default=150)
@@ -91,8 +93,8 @@ class TextElement(Element):
 class FrameElement(Element):
     id: str = Field(default_factory=lambda: generate_id("frame"))
     element_type: Literal["frame"] = "frame"
-    fill: Optional[Fill] = Field(default_factory=SolidFill)
-    stroke: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#888888"))
+    fill: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#FFFFFF"))
+    stroke: Optional[Fill] = None
     strokeWidth: float = 1
     clipsContent: bool = True
     cornerRadius: float = 0

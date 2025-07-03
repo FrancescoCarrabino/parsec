@@ -5,7 +5,8 @@ import { useAppState } from '../state/AppStateContext';
 import { webSocketClient } from '../api/websocket_client';
 import type { ShapeElement, TextElement, FrameElement, PathElement, Fill, CanvasElement } from '../state/types';
 import { FillSection } from './FillSection';
-import { TextSection } from './TextSection';
+// --- IMPORT THE NEW COMPONENT ---
+import { TextPropertiesSection } from './TextPropertiesSection';
 
 // --- STYLES (no changes) ---
 const panelStyle: React.CSSProperties = { width: '280px', height: '100%', background: '#252627', color: '#ccc', padding: '16px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '14px', zIndex: 10, borderLeft: '1px solid #444', overflowY: 'auto' };
@@ -29,14 +30,7 @@ export const PropertiesPanel: React.FC = () => {
   const selectedElement = selectedElementIds.length === 1 ? elements[selectedElementIds[0]] : null;
 
   const handlePropertyChange = (property: string, value: any) => { if (!selectedElement) return; webSocketClient.sendElementUpdate({ id: selectedElement.id, [property]: value }); };
-  
-  // --- FIX: Correctly call sendReorderElement ---
-  const handleArrange = (command: string) => { 
-    if (!selectedElement) return; 
-    // This now calls the correct method from our fixed websocket_client.ts
-    webSocketClient.sendReorderElement(selectedElement.id, command); 
-  };
-  
+  const handleArrange = (command: string) => { if (!selectedElement) return; webSocketClient.sendReorderElement(selectedElement.id, command); };
   const handleGroup = () => { if (selectedElementIds.length > 1) { webSocketClient.sendGroupElements(selectedElementIds); } };
   const handleUngroup = () => { if (selectedElement && (selectedElement.element_type === 'group' || selectedElement.element_type === 'frame')) { webSocketClient.sendUngroupElement(selectedElement.id); } };
 
@@ -45,17 +39,14 @@ export const PropertiesPanel: React.FC = () => {
     return (<div style={panelStyle}><div style={titleStyle}>Properties</div><p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>{selectedElementIds.length > 1 ? `${selectedElementIds.length} elements selected` : 'No element selected.'}</p><div style={sectionStyle}><div style={titleStyle}>Grouping</div><button onClick={handleGroup} style={canGroup ? buttonStyle : disabledButtonStyle} disabled={!canGroup}>Group Selection (Ctrl+G)</button></div></div>);
   }
 
-  // --- REFACTOR: Simplify element type casting ---
-  const shapeElement = selectedElement.element_type === 'shape' ? selectedElement as ShapeElement : null;
   const textElement = selectedElement.element_type === 'text' ? selectedElement as TextElement : null;
   const frameElement = selectedElement.element_type === 'frame' ? selectedElement as FrameElement : null;
+  const shapeElement = selectedElement.element_type === 'shape' ? selectedElement as ShapeElement : null;
   const pathElement = selectedElement.element_type === 'path' ? selectedElement as PathElement : null;
   const groupElement = selectedElement.element_type === 'group' ? selectedElement : null;
 
   const canUngroup = !!(frameElement || groupElement);
-  // This variable will hold whichever element type is currently selected that can have a fill/stroke.
   const fillableElement = shapeElement || frameElement || pathElement;
-  // This variable will hold whichever element type can have corner radius.
   const cornerElement = shapeElement || frameElement;
 
   return (
@@ -63,51 +54,33 @@ export const PropertiesPanel: React.FC = () => {
       <div style={{ ...titleStyle, paddingBottom: '8px' }}>{selectedElement.name || selectedElement.element_type}</div>
       <div style={{ ...sectionStyle, borderTop: 'none', paddingTop: '0' }}><div style={titleStyle}>Grouping</div><button onClick={handleUngroup} style={canUngroup ? buttonStyle : disabledButtonStyle} disabled={!canUngroup}>Ungroup (Ctrl+Shift+G)</button></div>
       <div style={sectionStyle}><div style={titleStyle}>Transform</div><PropertyInput label="Name" propName="name" type="text" element={selectedElement} onUpdate={handlePropertyChange} /><PropertyInput label="X" propName="x" element={selectedElement} onUpdate={handlePropertyChange} /><PropertyInput label="Y" propName="y" element={selectedElement} onUpdate={handlePropertyChange} /><PropertyInput label="Width" propName="width" element={selectedElement} onUpdate={handlePropertyChange} /><PropertyInput label="Height" propName="height" element={selectedElement} onUpdate={handlePropertyChange} /><PropertyInput label="Rotation" propName="rotation" element={selectedElement} onUpdate={handlePropertyChange} /></div>
-      
-      {textElement && <div style={sectionStyle}><div style={titleStyle}>Text</div><TextSection element={textElement} onPropertyChange={handlePropertyChange} /></div>}
-      
-      {fillableElement && (
-        <>
-          <div style={sectionStyle}>
-            <div style={titleStyle}>Fill</div>
-            {/* --- FIX: Pass the `fill` prop directly and correctly handle `null` --- */}
-            <FillSection 
-              fill={fillableElement.fill}
-              onFillChange={(newFill: Fill | null) => handlePropertyChange('fill', newFill)}
-            />
-          </div>
-          <div style={sectionStyle}>
-            <div style={titleStyle}>Stroke</div>
-            {fillableElement.stroke ? 
-              <button onClick={() => handlePropertyChange('stroke', null)} style={{ ...buttonStyle, marginBottom: '8px' }}>Remove Stroke</button> : 
-              <button onClick={() => handlePropertyChange('stroke', { type: 'solid', color: '#888888' })} style={{...buttonStyle, marginBottom: '8px'}}>Add Stroke</button>
-            }
-            {fillableElement.stroke && (<>
-              <PropertyInput label="Width" propName="strokeWidth" element={selectedElement} onUpdate={handlePropertyChange} />
-              {/* --- FIX: Pass the `stroke` prop directly --- */}
-              <FillSection 
-                fill={fillableElement.stroke} 
-                onFillChange={(newStrokeFill: Fill | null) => handlePropertyChange('stroke', newStrokeFill)} 
-              />
-            </>)}
-          </div>
-        </>
+
+      {/* --- REPLACE the old text section with our new component --- */}
+      {textElement && (
+        <div style={sectionStyle}>
+          <div style={titleStyle}>Text</div>
+          <TextPropertiesSection
+            element={textElement}
+            onPropertyChange={handlePropertyChange}
+          />
+        </div>
       )}
 
-      {cornerElement && <div style={sectionStyle}><div style={titleStyle}>Corners</div><PropertyInput label="Radius" propName="cornerRadius" element={selectedElement} onUpdate={handlePropertyChange} /></div>}
-      
-      {frameElement && <div style={sectionStyle}><div style={titleStyle}>Frame</div><div style={rowStyle}><label style={labelStyle}>Clip content</label><input type="checkbox" checked={frameElement.clipsContent} onChange={(e) => handlePropertyChange('clipsContent', e.target.checked)} style={{ width: '20px', height: '20px' }} /></div></div>}
-      
-      <div style={sectionStyle}>
-        <div style={titleStyle}>Arrange</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          {/* Pass the correct command strings the backend expects */}
-          <button onClick={() => handleArrange('BRING_FORWARD')} style={arrangeButtonStyle}>Forward</button>
-          <button onClick={() => handleArrange('SEND_BACKWARD')} style={arrangeButtonStyle}>Backward</button>
-          <button onClick={() => handleArrange('BRING_TO_FRONT')} style={arrangeButtonStyle}>To Front</button>
-          <button onClick={() => handleArrange('SEND_TO_BACK')} style={arrangeButtonStyle}>To Back</button>
+      {fillableElement && (<>
+        <div style={sectionStyle}><div style={titleStyle}>Fill</div><FillSection fill={fillableElement.fill} onFillChange={(newFill: Fill | null) => handlePropertyChange('fill', newFill)} /></div>
+        <div style={sectionStyle}><div style={titleStyle}>Stroke</div>
+          {fillableElement.stroke ? <button onClick={() => handlePropertyChange('stroke', null)} style={{ ...buttonStyle, marginBottom: '8px' }} >Remove Stroke</button> : <button onClick={() => handlePropertyChange('stroke', { type: 'solid', color: '#888888' })} style={{ ...buttonStyle, marginBottom: '8px' }}>Add Stroke</button>}
+          {fillableElement.stroke && (<>
+            <PropertyInput label="Width" propName="strokeWidth" element={selectedElement} onUpdate={handlePropertyChange} />
+            <FillSection fill={fillableElement.stroke} onFillChange={(newStrokeFill: Fill | null) => handlePropertyChange('stroke', newStrokeFill)} />
+          </>)}
         </div>
-      </div>
+      </>)}
+
+      {cornerElement && <div style={sectionStyle}><div style={titleStyle}>Corners</div><PropertyInput label="Radius" propName="cornerRadius" element={selectedElement} onUpdate={handlePropertyChange} /></div>}
+      {frameElement && <div style={sectionStyle}><div style={titleStyle}>Frame</div><div style={rowStyle}><label style={labelStyle}>Clip content</label><input type="checkbox" checked={frameElement.clipsContent} onChange={(e) => handlePropertyChange('clipsContent', e.target.checked)} style={{ width: '20px', height: '20px' }} /></div></div>}
+
+      <div style={sectionStyle}><div style={titleStyle}>Arrange</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}><button onClick={() => handleArrange('BRING_FORWARD')} style={arrangeButtonStyle}>Forward</button><button onClick={() => handleArrange('SEND_BACKWARD')} style={arrangeButtonStyle}>Backward</button><button onClick={() => handleArrange('BRING_TO_FRONT')} style={arrangeButtonStyle}>To Front</button><button onClick={() => handleArrange('SEND_TO_BACK')} style={arrangeButtonStyle}>To Back</button></div></div>
     </div>
   );
 };
