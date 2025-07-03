@@ -63,9 +63,11 @@ export const Toolbar = () => {
     <div style={toolbarStyle}>
       <ToolButton title="Select (V)" tool="select" icon="➚" activeTool={state.activeTool} onClick={handleToolChange} />
       <ToolButton title="Rectangle (R)" tool="rectangle" icon="■" activeTool={state.activeTool} onClick={handleToolChange} />
+      <ToolButton title="Ellipse (O)" tool="ellipse" icon="○" activeTool={state.activeTool} onClick={handleToolChange} />
 
       {/* --- ADD THIS LINE --- */}
       <ToolButton title="Text (T)" tool="text" icon="T" activeTool={state.activeTool} onClick={handleToolChange} />
+      <ToolButton title="Pen (P)" tool="pen" icon="✒️" activeTool={state.activeTool} onClick={handleToolChange} />
       <ToolButton title="Frame (F)" tool="frame" icon="[ ]" activeTool={state.activeTool} onClick={handleToolChange} />
 
     </div>

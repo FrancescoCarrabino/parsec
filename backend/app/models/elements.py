@@ -1,3 +1,4 @@
+# parsec-backend/app/models/elements.py
 from pydantic import BaseModel, Field, conlist
 from typing import Literal, Optional, List, Union
 from typing_extensions import Annotated
@@ -8,7 +9,6 @@ def generate_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
-# --- NEW FILL MODELS ---
 class SolidFill(BaseModel):
     type: Literal["solid"] = "solid"
     color: str = "#ffffff"
@@ -16,21 +16,19 @@ class SolidFill(BaseModel):
 
 class GradientStop(BaseModel):
     color: str
-    offset: float  # 0 to 1
+    offset: float
 
 
 class LinearGradientFill(BaseModel):
     type: Literal["linear-gradient"] = "linear-gradient"
-    angle: int = 90  # In degrees
+    angle: int = 90
     stops: conlist(GradientStop, min_length=2) = [
         GradientStop(color="#ff0000", offset=0),
         GradientStop(color="#0000ff", offset=1),
     ]
 
 
-# A tagged union to represent any possible fill type
 Fill = Annotated[Union[SolidFill, LinearGradientFill], Field(discriminator="type")]
-# --------------------
 
 
 class Element(BaseModel):
@@ -47,13 +45,27 @@ class Element(BaseModel):
     name: str = ""
 
 
+# --- NEW: Path point models ---
+class PathControlPoint(BaseModel):
+    x: float
+    y: float
+
+
+class PathPoint(BaseModel):
+    x: float
+    y: float
+    handleIn: Optional[PathControlPoint] = None
+    handleOut: Optional[PathControlPoint] = None
+    handleType: Literal["symmetrical", "asymmetrical", "disconnected"] = "symmetrical"
+
+
+# --- UPDATED element models ---
 class ShapeElement(Element):
     id: str = Field(default_factory=lambda: generate_id("shape"))
     element_type: Literal["shape"] = "shape"
-    shape_type: Literal["rect", "circle"]
-    # The 'fill' property is now a complex object, defaulting to solid white.
-    fill: Fill = Field(default_factory=SolidFill)
-    stroke: Optional[Fill] = None  # The stroke can be any Fill type, or nothing
+    shape_type: Literal["rect", "circle", "ellipse"]
+    fill: Optional[Fill] = Field(default_factory=SolidFill)
+    stroke: Optional[Fill] = None
     strokeWidth: float = 1
     cornerRadius: float = 0
 
@@ -64,35 +76,36 @@ class GroupElement(Element):
 
 
 class TextElement(Element):
-    """Represents a text object on the canvas."""
-
     id: str = Field(default_factory=lambda: generate_id("text"))
-    element_type: Literal["text"] = "text"
+    element_type: Literal["text"]
     content: str = "Type something..."
     fontFamily: str = "Inter"
     fontSize: int = 16
     fontColor: str = "#000000"
     align: Literal["left", "center", "right"] = "left"
     verticalAlign: Literal["top", "middle", "bottom"] = "top"
-    # Text elements have their width/height determined by content, so we make them optional
-    width: float = Field(default=150)  # A default width for new elements
+    width: float = Field(default=150)
     height: float = Field(default=22)
 
 
 class FrameElement(Element):
     id: str = Field(default_factory=lambda: generate_id("frame"))
     element_type: Literal["frame"] = "frame"
-
-    # Frames have their own visual properties, just like shapes
-    fill: Fill = Field(default_factory=SolidFill)
-    stroke: Optional[Fill] = Field(
-        default_factory=lambda: SolidFill(color="#888888")
-    )  # Default with a visible stroke
+    fill: Optional[Fill] = Field(default_factory=SolidFill)
+    stroke: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#888888"))
     strokeWidth: float = 1
-
-    # The key property that defines a frame's behavior
     clipsContent: bool = True
     cornerRadius: float = 0
 
 
-AnyElement = Union[ShapeElement, FrameElement, GroupElement, TextElement]
+class PathElement(Element):
+    id: str = Field(default_factory=lambda: generate_id("path"))
+    element_type: Literal["path"] = "path"
+    points: List[PathPoint]
+    isClosed: bool = False
+    fill: Optional[Fill] = Field(default_factory=SolidFill)
+    stroke: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#333333"))
+    strokeWidth: float = 1
+
+
+AnyElement = Union[ShapeElement, FrameElement, GroupElement, TextElement, PathElement]

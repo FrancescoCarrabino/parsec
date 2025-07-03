@@ -1,3 +1,5 @@
+// parsec-frontend/src/state/AppStateContext.tsx
+
 import React, { createContext, useReducer, useContext, Dispatch } from 'react';
 import type { AppState, Action, CanvasElement } from './types';
 
@@ -5,7 +7,8 @@ const initialState: AppState = {
   elements: {},
   selectedElementIds: [],
   groupEditingId: null,
-  activeTool: 'select', // Default to select tool
+  activeTool: 'select',
+  editingElementId: null, // <-- ADD THIS
 };
 
 const AppStateContext = createContext<{
@@ -14,7 +17,6 @@ const AppStateContext = createContext<{
 } | undefined>(undefined);
 
 const appStateReducer = (state: AppState, action: Action): AppState => {
-  // Optional: log every action for easier debugging
   // console.log(`%c Reducer: ${action.type}`, 'color: #7f00ff; font-weight: bold;', action.payload);
 
   switch (action.type) {
@@ -35,7 +37,6 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
     }
 
     case 'ELEMENTS_UPDATED': {
-      // By wrapping this case in curly braces, `updatedElements` has its own scope.
       const updatedElements = { ...state.elements };
       action.payload.forEach(element => {
         updatedElements[element.id] = element;
@@ -44,18 +45,20 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
     }
 
     case 'ELEMENT_DELETED': {
-      // This `newElements` is now safely scoped and does not conflict with any others.
       const newElements = { ...state.elements };
       delete newElements[action.payload.id];
       return {
         ...state,
         elements: newElements,
         selectedElementIds: state.selectedElementIds.filter(id => id !== action.payload.id),
+        // If the element being edited was deleted, stop editing it.
+        editingElementId: state.editingElementId === action.payload.id ? null : state.editingElementId,
       };
     }
 
     case 'SET_SELECTION': {
-      return { ...state, selectedElementIds: action.payload.ids, groupEditingId: null };
+      // When selection changes, we should stop editing any element.
+      return { ...state, selectedElementIds: action.payload.ids, groupEditingId: null, editingElementId: null };
     }
 
     case 'ADD_TO_SELECTION': {
@@ -72,6 +75,7 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
         ...state,
         groupEditingId: action.payload.groupId,
         selectedElementIds: [action.payload.elementId],
+        editingElementId: null, // Stop editing when entering a group
       };
     }
 
@@ -80,15 +84,29 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
         ...state,
         selectedElementIds: state.groupEditingId ? [state.groupEditingId] : [],
         groupEditingId: null,
+        editingElementId: null, // Also stop editing when exiting a group
       };
     }
 
     case 'SET_ACTIVE_TOOL': {
-      // When changing tools, it's good practice to clear any selection.
       return {
         ...state,
         activeTool: action.payload.tool,
         selectedElementIds: [],
+        groupEditingId: null,
+        editingElementId: null, // Also stop editing when changing tools
+      };
+    }
+
+    // --- ADD THIS NEW CASE ---
+    case 'SET_EDITING_ELEMENT_ID': {
+      const { id } = action.payload;
+      return {
+        ...state,
+        editingElementId: id,
+        // When we start editing an element, it should be the only selected thing.
+        // And we should not be in group editing mode.
+        selectedElementIds: id ? [id] : [],
         groupEditingId: null,
       };
     }

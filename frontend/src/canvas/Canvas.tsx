@@ -1,197 +1,132 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Transformer, Group as KonvaGroup, Rect } from 'react-konva';
+// parsec-frontend/src/canvas/Canvas.tsx
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Stage, Layer, Transformer, Group as KonvaGroup } from 'react-konva';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { useAppState } from '../state/AppStateContext';
 import { ElementRenderer } from './elements/ElementRenderer';
 import { webSocketClient } from '../api/websocket_client';
-import type { CanvasElement, TextElement } from '../state/types';
-import { Vector2d } from 'konva/lib/types';
+import type { CanvasElement, TextElement, PathElement } from '../state/types';
+import { useDrawingTool } from '../hooks/useDrawingTool';
+import { usePenTool } from '../hooks/usePenTool';
+import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
+import { usePathEditor } from '../hooks/usePathEditor';
 
 export const Canvas = () => {
   const { state, dispatch } = useAppState();
-  const { elements, selectedElementIds, groupEditingId, activeTool } = state;
+  // --- REFACTORED: Get editing ID from global state ---
+  const { elements, selectedElementIds, groupEditingId, activeTool, editingElementId } = state;
+
+  // --- REFACTORED: Derive the "editing" objects from the global state on every render ---
+  const editingTextNode = editingElementId ? state.elements[editingElementId] : null;
+  const editingText = (editingTextNode?.element_type === 'text') ? editingTextNode as TextElement : null;
+
+  const editingPathNode = editingElementId ? state.elements[editingElementId] : null;
+  const editingPath = (editingPathNode?.element_type === 'path') ? editingPathNode as PathElement : null;
+
+  const stageRef = useRef<Konva.Stage>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
+  const actionInProgress = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [stageScale, setStageScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingRect, setDrawingRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const drawingStartPos = useRef<Vector2d>({ x: 0, y: 0 });
-  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
-  const [marqueeRect, setMarqueeRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
-  const [editingText, setEditingText] = useState<{ id: string; node: Konva.Text } | null>(null);
 
-  const transformerRef = useRef<Konva.Transformer>(null);
-  const stageRef = useRef<Konva.Stage>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // --- REFACTORED: Remove local useState for editingText and editingPath ---
 
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (stage?.container()) {
-      if (isPanning) stage.container().style.cursor = 'grab';
-      else if (activeTool === 'rectangle' || activeTool === 'frame') stage.container().style.cursor = 'crosshair';
-      else if (activeTool === 'text') stage.container().style.cursor = 'text';
-      else stage.container().style.cursor = 'default';
-    }
-  }, [isPanning, activeTool]);
+  const drawingTool = useDrawingTool(activeTool);
+  const penTool = usePenTool(activeTool, stageScale);
+  const marqueeTool = useMarqueeSelect(activeTool, isPanning);
+  // --- REFACTORED: Pass the derived editingPath and remove the setter ---
+  const pathEditor = usePathEditor(editingPath, stageScale);
 
+  // Keyboard shortcuts effect
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeElement = document.activeElement;
-      const isTyping = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
-
-      // --- DELETE LOGIC ---
-      if ((e.key === 'Backspace' || e.key === 'Delete') && !isTyping && selectedElementIds.length > 0) {
-        e.preventDefault(); // Prevent browser back navigation on Backspace
-        selectedElementIds.forEach(id => {
-          webSocketClient.sendDeleteElement(id);
-        });
-        dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
-        return; // Exit early
-      }
-
-      if (isTyping) return; // Prevent other shortcuts while typing
-
-      if (e.key === ' ') { e.preventDefault(); setIsPanning(true); }
-
+      const isTyping = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+      if ((e.key === 'Backspace' || e.key === 'Delete') && !isTyping && selectedElementIds.length > 0) { e.preventDefault(); selectedElementIds.forEach(id => webSocketClient.sendDeleteElement(id)); return; }
+      if (isTyping) return;
+      if (e.key === ' ' && !penTool.isDrawing && !editingPath) { e.preventDefault(); setIsPanning(true); }
       if (e.key === 'Escape') {
-        if (editingText) { setEditingText(null); }
+        if (penTool.isDrawing) { penTool.cancel(); }
+        // --- REFACTORED: Dispatch actions to exit editing mode ---
+        else if (editingPath) { dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: null } }); }
+        else if (editingText) { dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: null } }); }
         else if (groupEditingId) { dispatch({ type: 'EXIT_GROUP_EDITING' }); }
       }
+      if (e.key === 'Enter' && penTool.isDrawing) { penTool.onDblClick(); }
     };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') { e.preventDefault(); setIsPanning(false); }
-    };
-
+    const handleKeyUp = (e: KeyboardEvent) => { if (e.key === ' ') { e.preventDefault(); setIsPanning(false); } };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [dispatch, groupEditingId, editingText, selectedElementIds]);
+  }, [dispatch, groupEditingId, editingText, editingPath, selectedElementIds, penTool]);
 
+  // Transformer effect
   useEffect(() => {
     if (!transformerRef.current || !stageRef.current) return;
-    const selectedNodes = selectedElementIds.map(id => stageRef.current!.findOne(`#${id}`)).filter((node): node is Konva.Node => !!node);
+    // --- REFACTORED: Use derived editingText/Path ---
+    if (editingText || editingPath) { transformerRef.current.nodes([]); return; }
+    const selectedNodes = selectedElementIds.map(id => stageRef.current!.findOne(`.${id}`)).filter((node): node is Konva.Node => !!node);
     transformerRef.current.nodes(selectedNodes);
-    transformerRef.current.getLayer()?.batchDraw();
-  }, [selectedElementIds]);
+  }, [selectedElementIds, editingText, editingPath]);
 
-  useEffect(() => {
-    if (editingText && textareaRef.current) { textareaRef.current.focus(); }
-  }, [editingText]);
-
-  const haveIntersection = (r1: any, r2: any) => {
-    return !(r2.x > r1.x + r1.width || r2.x + r2.width < r1.x || r2.y > r1.y + r1.height || r2.y + r2.height < r1.y);
-  };
-
-  const finishEditing = () => {
-    if (!editingText || !textareaRef.current) return;
-    const newContent = textareaRef.current.value;
-    webSocketClient.sendElementUpdate({ id: editingText.id, content: newContent });
-    setEditingText(null);
-  };
-  const handleTextareaBlur = () => { finishEditing(); };
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finishEditing(); }
-    if (e.key === 'Escape') { setEditingText(null); }
-  };
+  // Textarea focus effect
+  useEffect(() => { if (editingText && textareaRef.current) { textareaRef.current.focus(); } }, [editingText]);
 
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    setMarqueeRect(null);
-    if (e.target !== stageRef.current) return;
-    if (activeTool === 'select' && !isPanning) {
-      setIsMarqueeSelecting(true);
-      const pos = e.target.getStage()?.getRelativePointerPosition();
-      if (!pos) return;
-      setMarqueeRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
-      dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
-      return;
-    }
+    // Handle the "click-to-create" Text tool first.
     if (activeTool === 'text') {
-      const pos = e.target.getStage()?.getRelativePointerPosition();
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pos = stage.getRelativePointerPosition();
       if (!pos) return;
-      webSocketClient.sendCreateElement({ element_type: 'text', x: pos.x, y: pos.y, content: 'Type...', fontSize: 24, fontFamily: 'Inter', fontColor: '#333333' });
-      dispatch({ type: "SET_ACTIVE_TOOL", payload: { tool: "select" } });
+
+      // Create the payload for a new text element at the clicked position.
+      const newTextPayload = {
+        element_type: 'text',
+        x: pos.x,
+        y: pos.y,
+        content: "Type something...",
+        // You can add other defaults here if needed
+      };
+
+      // Send the creation command to the backend.
+      webSocketClient.sendCreateElement(newTextPayload);
+
+      // For a better UX, switch back to the select tool immediately after creation.
+      dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'select' } });
+
+      // Prevent other tool handlers from running.
       return;
     }
-    const isDrawingToolActive = activeTool === 'rectangle' || activeTool === 'frame';
-    if (isPanning || !isDrawingToolActive) return;
-    setIsDrawing(true);
-    const pos = e.target.getStage()?.getRelativePointerPosition();
-    if (!pos) return;
-    drawingStartPos.current = pos;
-    setDrawingRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
-  };
 
-  const handleElementDblClick = (e: KonvaEventObject<MouseEvent>) => {
-    const node = e.target; const id = node.id(); const element = elements[id] as TextElement;
-    if (element && element.element_type === 'text') {
-      transformerRef.current?.nodes([]); setEditingText({ id, node: node as Konva.Text });
-    }
+    // Original logic for other tools
+    actionInProgress.current = true;
+    if (marqueeTool.onMouseDown(e)) return;
+    if (drawingTool.onMouseDown(e)) return;
+    if (penTool.onMouseDown(e)) return;
   };
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-    const pos = e.target.getStage()?.getRelativePointerPosition();
-    if (!pos) return;
-    if (isMarqueeSelecting) {
-      const startPos = marqueeRect!;
-      setMarqueeRect({
-        x: Math.min(startPos.x, pos.x), y: Math.min(startPos.y, pos.y),
-        width: Math.abs(pos.x - startPos.x), height: Math.abs(pos.y - startPos.y),
-      });
-      return;
-    }
-    if (!isDrawing) return;
-    const startPos = drawingStartPos.current;
-    setDrawingRect({
-      x: Math.min(startPos.x, pos.x), y: Math.min(startPos.y, pos.y),
-      width: Math.abs(pos.x - startPos.x), height: Math.abs(pos.y - startPos.y),
-    });
+    marqueeTool.onMouseMove(e);
+    drawingTool.onMouseMove(e);
+    penTool.onMouseMove(e);
   };
 
-  const handleMouseUp = () => {
-    if (isMarqueeSelecting && marqueeRect) {
-      const stage = stageRef.current;
-      if (stage) {
-        const allNodes = stage.find('Rect, Circle, Text, Group');
-        const selectedNodes = allNodes.filter((node) => {
-          if (node.getParent()?.className === 'Transformer') return false;
-          return haveIntersection(marqueeRect, node.getClientRect());
-        });
-        const idsToSelect = new Set<string>();
-        selectedNodes.forEach(node => {
-          const element = elements[node.id()];
-          if (element) {
-            if (element.parentId && !groupEditingId) { idsToSelect.add(element.parentId); }
-            else { idsToSelect.add(element.id); }
-          }
-        });
-        dispatch({ type: 'SET_SELECTION', payload: { ids: Array.from(idsToSelect) } });
-      }
-      setIsMarqueeSelecting(false);
-      return;
-    }
-    setIsDrawing(false);
-    if (!drawingRect || (drawingRect.width < 5 && drawingRect.height < 5)) {
-      setDrawingRect(null); return;
-    }
-    if (activeTool === 'rectangle') {
-      webSocketClient.sendCreateElement({ element_type: 'shape', shape_type: 'rect', x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height, fill: { type: 'solid', color: '#cccccc' } });
-    } else if (activeTool === 'frame') {
-      webSocketClient.sendCreateElement({ element_type: 'frame', x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height, fill: { type: 'solid', color: 'rgba(70, 70, 70, 0.5)' }, stroke: { type: "solid", color: "#888888" }, strokeWidth: 1 });
-    }
-    setDrawingRect(null);
-    dispatch({ type: "SET_ACTIVE_TOOL", payload: { tool: "select" } });
+  const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
+    marqueeTool.onMouseUp(e);
+    drawingTool.onMouseUp();
+    setTimeout(() => { actionInProgress.current = false; }, 50);
   };
 
-  const handleSelection = (e: KonvaEventObject<MouseEvent>) => {
-    if (activeTool !== 'select' || editingText) return;
+  const handleClick = (e: KonvaEventObject<MouseEvent>) => {
+    if (actionInProgress.current) return;
+    if (activeTool !== 'select' || editingText || editingPath || penTool.isDrawing) return;
     const target = e.target;
-    if (target === stageRef.current) {
-      if (groupEditingId) dispatch({ type: 'EXIT_GROUP_EDITING' });
-      else dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
-      return;
-    }
+    if (target === stageRef.current) { dispatch({ type: 'SET_SELECTION', payload: { ids: [] } }); return; }
     const id = target.id(); const element = elements[id]; if (!element) return;
     const idToSelect = (element.parentId && !groupEditingId) ? element.parentId : id;
     if (e.evt.shiftKey) {
@@ -200,68 +135,124 @@ export const Canvas = () => {
     } else { dispatch({ type: 'SET_SELECTION', payload: { ids: [idToSelect] } }); }
   };
 
-  const handleStageDblClick = (e: KonvaEventObject<MouseEvent>) => {
-    const target = e.target; if (target === stageRef.current) return; const id = target.id(); const element = elements[id];
-    if (element?.parentId && (elements[element.parentId]?.element_type === 'group' || elements[element.parentId]?.element_type === 'frame')) {
+  const handleDblClick = (e: KonvaEventObject<MouseEvent>) => {
+    if (penTool.onDblClick()) return;
+    const node = e.target; if (node === stageRef.current) return;
+    const element = elements[node.id()]; if (!element) return;
+    // --- REFACTORED: Dispatch actions to enter editing mode ---
+    if (element.element_type === 'text') { dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: element.id } }); }
+    else if (element.element_type === 'path') { dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: element.id } }); }
+    else if (element.parentId && ['group', 'frame'].includes(elements[element.parentId]?.element_type) && !editingPath) {
       dispatch({ type: 'ENTER_GROUP_EDITING', payload: { groupId: element.parentId, elementId: element.id } });
     }
   };
 
-  const handleElementDragEnd = (e: KonvaEventObject<DragEvent>) => { webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() }); };
+  const finishEditingText = () => {
+    if (!editingText || !textareaRef.current) return;
+    webSocketClient.sendElementUpdate({ id: editingText.id, content: textareaRef.current.value });
+    // --- REFACTORED: Dispatch action to exit editing mode ---
+    dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: null } });
+  };
+  const handleTextareaBlur = () => { finishEditingText(); };
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finishEditingText(); }
+    if (e.key === 'Escape') { dispatch({ type: 'SET_EDITING_ELEMENT_ID', payload: { id: null } }); }
+  };
+
+  const handleElementDragEnd = (e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
+    webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+  };
+
   const handleTransformEnd = (e: KonvaEventObject<Event>) => {
     const node = e.target; const element = elements[node.id()]; if (!element) return;
     const scaleX = node.scaleX(); const scaleY = node.scaleY();
     node.scaleX(1); node.scaleY(1);
-    webSocketClient.sendElementUpdate({ id: element.id, x: node.x(), y: node.y(), rotation: Math.round(node.rotation()), width: Math.max(5, (element.width || 0) * scaleX), height: Math.max(5, (element.height || 0) * scaleY) });
-  };
-  const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault(); if (editingText) finishEditing();
-    const stage = stageRef.current; if (!stage) return;
-    const scaleBy = 1.1; const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition(); if (!pointer) return;
-    const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-    const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-    setStageScale(newScale);
-    setStagePos({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
+    const updatePayload: any = { id: element.id, x: node.x(), y: node.y(), rotation: Math.round(node.rotation()), width: Math.max(5, element.width * scaleX), height: Math.max(5, element.height * scaleY) };
+    if (element.element_type === 'path') {
+      updatePayload.points = element.points.map(p => ({ ...p, x: p.x * scaleX, y: p.y * scaleY, handleIn: p.handleIn ? { x: p.handleIn.x * scaleX, y: p.handleIn.y * scaleY } : undefined, handleOut: p.handleOut ? { x: p.handleOut.x * scaleX, y: p.handleOut.y * scaleY } : undefined }));
+    }
+    webSocketClient.sendElementUpdate(updatePayload);
   };
 
+  const handleWheel = (e: KonvaEventObject<WheelEvent>) => { e.evt.preventDefault(); const stage = stageRef.current; if (!stage) return; const scaleBy = 1.1; const oldScale = stage.scaleX(); const pointer = stage.getPointerPosition(); if (!pointer) return; const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale }; const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy; setStageScale(newScale); setStagePos({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale }); };
+
+  const getEditingTextareaStyle = (): React.CSSProperties => {
+    // We still use the derived editingText object to know *if* we are editing.
+    if (!editingText) return { display: 'none' };
+
+    const stage = stageRef.current;
+    if (!stage) return { display: 'none' };
+
+    // Actively find the Konva node on the canvas using its ID.
+    // The '#' makes it an efficient ID selector.
+    const node = stage.findOne('#' + editingText.id) as Konva.Text;
+
+    // If the node isn't found for any reason (e.g., timing), prevent a crash.
+    if (!node) return { display: 'none' };
+
+    // The rest of the logic can now proceed safely with the found node.
+    const textPosition = node.getAbsolutePosition();
+    const areaPosition = {
+      x: stage.container().offsetLeft + textPosition.x,
+      y: stage.container().offsetTop + textPosition.y,
+    };
+
+    return {
+      position: 'absolute',
+      top: `${areaPosition.y}px`,
+      left: `${areaPosition.x}px`,
+      width: `${node.width() * stage.scaleX()}px`,
+      height: `${node.height() * stage.scaleX() + 10}px`,
+      fontSize: `${node.fontSize() * stage.scaleY()}px`,
+      fontFamily: node.fontFamily(),
+      lineHeight: node.lineHeight(),
+      padding: '0px',
+      margin: '0px',
+      border: '1px solid #007aff',
+      background: 'rgba(255, 255, 255, 0.9)',
+      outline: 'none',
+      resize: 'none',
+      overflow: 'hidden',
+      color: node.fill(),
+      textAlign: node.align() as 'left' | 'center' | 'right',
+      transformOrigin: 'top left',
+      transform: `rotate(${node.rotation()}deg)`,
+    };
+  };
   const renderElements = (elementList: CanvasElement[]): React.ReactNode[] => {
     return elementList.map(element => {
       if (element.element_type === 'group' || element.element_type === 'frame') {
         const children = Object.values(elements).filter(el => el.parentId === element.id).sort((a, b) => a.zIndex - b.zIndex);
+        const isGroupDraggable = (!element.parentId && !editingPath) || (groupEditingId === element.parentId);
         const clipFunc = (element.element_type === 'frame' && element.clipsContent) ? (ctx: Konva.Context) => { ctx.rect(0, 0, element.width, element.height); } : undefined;
         return (
-          <KonvaGroup key={element.id} id={element.id} x={element.x} y={element.y} rotation={element.rotation} draggable={!groupEditingId} onDragEnd={handleElementDragEnd} clipFunc={clipFunc}>
-            <ElementRenderer elementId={element.id} onDragEnd={handleElementDragEnd} onDblClick={handleElementDblClick} isVisible={true} />
+          <KonvaGroup key={element.id} id={element.id} name={element.id} x={element.x} y={element.y} rotation={element.rotation} draggable={isGroupDraggable} onDragEnd={handleElementDragEnd} clipFunc={clipFunc} onDblClick={handleDblClick}>
+            <ElementRenderer elementId={element.id} isVisible={true} onDblClick={handleDblClick} onDragEnd={handleElementDragEnd} />
             {renderElements(children)}
           </KonvaGroup>
         );
       }
-      const isVisible = editingText?.id !== element.id;
-      return <ElementRenderer key={element.id} elementId={element.id} onDragEnd={handleElementDragEnd} onDblClick={handleElementDblClick} isVisible={isVisible} />;
+      const isVisible = editingElementId !== element.id;
+      return <ElementRenderer key={element.id} elementId={element.id} isVisible={isVisible} onDblClick={handleDblClick} onDragEnd={handleElementDragEnd} />;
     });
   };
-
-  const topLevelElements = Object.values(elements).filter(el => !el.parentId && el.isVisible).sort((a, b) => a.zIndex - b.zIndex);
-
-  const getEditingTextareaStyle = (): React.CSSProperties => {
-    if (!editingText) return { display: 'none' };
-    const { node } = editingText; const textPosition = node.getAbsolutePosition(); const stage = node.getStage(); if (!stage) return { display: 'none' };
-    const areaPosition = { x: stage.container().offsetLeft + textPosition.x, y: stage.container().offsetTop + textPosition.y };
-    return { position: 'absolute', top: `${areaPosition.y}px`, left: `${areaPosition.x}px`, width: `${node.width() * stage.scaleX()}px`, height: `${node.height() * stage.scaleX() + 10}px`, fontSize: `${node.fontSize() * stage.scaleY()}px`, fontFamily: node.fontFamily(), lineHeight: node.lineHeight(), padding: '0px', margin: '0px', border: '1px solid #007aff', background: 'rgba(255, 255, 255, 0.9)', outline: 'none', resize: 'none', overflow: 'hidden', color: node.fill(), textAlign: node.align() as 'left' | 'center' | 'right', transformOrigin: 'top left', transform: `rotate(${node.rotation()}deg)` };
-  };
+  const topLevelElements = Object.values(elements).filter(el => !el.parentId).sort((a, b) => a.zIndex - b.zIndex);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Stage ref={stageRef} width={window.innerWidth - 520} height={window.innerHeight} onClick={handleSelection} onDblClick={handleStageDblClick} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning} onDragEnd={(e) => { if (isPanning) setStagePos(e.target.position()) }}>
+      <Stage ref={stageRef} onDblClick={handleDblClick} onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel} width={window.innerWidth - 520} height={window.innerHeight} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning}>
         <Layer>
           {renderElements(topLevelElements)}
-          {drawingRect && <Rect {...drawingRect} fill="rgba(0, 122, 255, 0.3)" stroke="#007aff" strokeWidth={1} />}
-          {marqueeRect && <Rect {...marqueeRect} fill="rgba(0, 122, 255, 0.15)" stroke="#007aff" strokeWidth={1} strokeScaleEnabled={false} dash={[4, 4]} />}
-          <Transformer ref={transformerRef} onTransformEnd={handleTransformEnd} boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox} />
+          {drawingTool.preview}
+          {marqueeTool.preview}
+          {penTool.preview}
+          {pathEditor.editUI}
+          <Transformer ref={transformerRef} onTransformEnd={handleTransformEnd} boundBoxFunc={(oldBox, newBox) => newBox.width < 5 || newBox.height < 5 ? oldBox : newBox} ignoreStroke={true} />
         </Layer>
       </Stage>
-      {editingText && (<textarea ref={textareaRef} style={getEditingTextareaStyle()} defaultValue={editingText.node.text()} onBlur={handleTextareaBlur} onKeyDown={handleTextareaKeyDown} />)}
+      {/* --- REFACTORED: Use derived editingText object --- */}
+      {editingText && stageRef.current && (<textarea ref={textareaRef} style={getEditingTextareaStyle()} defaultValue={editingText.content} onBlur={handleTextareaBlur} onKeyDown={handleTextareaKeyDown} />)}
     </div>
   );
 };

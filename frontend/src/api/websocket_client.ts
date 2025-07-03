@@ -1,3 +1,5 @@
+// parsec-frontend/src/api/websocket_client.ts
+
 import { Dispatch } from 'react';
 import type { Action } from '../state/types';
 
@@ -8,9 +10,6 @@ class WebSocketClient {
 	private dispatch: Dispatch<Action> | null = null;
 
 	public connect(dispatch: Dispatch<Action>) {
-		console.log("%c[WebSocket] Attempting to connect...", "color: gray");
-
-		// Ensure we don't have multiple connections
 		if (this.socket && this.socket.readyState < 2) {
 			console.warn("[WebSocket] Connection already exists.");
 			return;
@@ -19,33 +18,22 @@ class WebSocketClient {
 		this.dispatch = dispatch;
 		this.socket = new WebSocket(WEBSOCKET_URL);
 
-		// --- We are attaching event listeners directly to be 100% sure they are set ---
-
 		this.socket.onopen = (event) => {
 			console.log("%c[WebSocket] ✔️ Connection OPEN.", "color: green; font-weight: bold;", event);
 		};
 
 		this.socket.onmessage = (event: MessageEvent) => {
-			// THIS IS THE MOST IMPORTANT LOG. If this doesn't appear, the browser is not receiving the message.
-			console.log("%c[WebSocket] 📩 MESSAGE RECEIVED FROM SERVER:", "color: orange; font-weight: bold;", event.data);
-
-			if (!this.dispatch) {
-				console.error("[WebSocket] Dispatch function is not available. Cannot process message.");
-				return;
-			}
-
+			if (!this.dispatch) return;
 			try {
 				const message = JSON.parse(event.data);
+                // The backend sends snake_case, so we convert it to the reducer's expected SCREAMING_SNAKE_CASE
 				const actionType = message.type?.toUpperCase();
-
 				if (actionType && message.payload) {
-					console.log(`%c[WebSocket] 👉 Dispatching action: ${actionType}`, "color: yellow;", message.payload);
+					console.log(`%c[WebSocket] 📩 Dispatching: ${actionType}`, "color: orange;", message.payload);
 					this.dispatch({ type: actionType, payload: message.payload });
-				} else {
-					console.error("[WebSocket] Received message object is invalid:", message);
 				}
 			} catch (error) {
-				console.error("[WebSocket] Failed to parse JSON from message:", error);
+				console.error("[WebSocket] Failed to parse JSON from message:", error, event.data);
 			}
 		};
 
@@ -54,20 +42,11 @@ class WebSocketClient {
 		};
 
 		this.socket.onclose = (event) => {
-			console.warn(`[WebSocket] 🔌 Connection CLOSED. Code: ${event.code}, Reason: ${event.reason}. Reconnecting...`);
-			// Simple reconnect logic
+			console.warn(`[WebSocket] 🔌 Connection CLOSED. Code: ${event.code}. Reconnecting...`);
 			setTimeout(() => this.connect(dispatch), 2000);
 		};
 	}
 
-	// Use this function to send prompts from the chat
-	public sendPrompt(prompt: string, selectionContext: string[] | null) {
-		const message = { type: "user_prompt", payload: { text: prompt, selected_ids: selectionContext } };
-		console.log("%c[WebSocket] 🚀 SENDING PROMPT TO SERVER:", "color: pink;", message);
-		this.sendMessage(message);
-	}
-
-	// Generic sender
 	private sendMessage(message: object) {
 		if (this.socket && this.socket.readyState === WebSocket.OPEN) {
 			this.socket.send(JSON.stringify(message));
@@ -76,22 +55,25 @@ class WebSocketClient {
 		}
 	}
 
-	// --- Direct command methods ---
+	// --- Direct User Action Commands ---
+	public sendPrompt(prompt: string, selectionContext: string[] | null) { this.sendMessage({ type: "user_prompt", payload: { text: prompt, selected_ids: selectionContext } }); }
+	public sendCreateElement(elementData: object) { this.sendMessage({ type: "create_element", payload: elementData }); }
 	public sendElementUpdate(updatePayload: { id: string, [key: string]: any }) { this.sendMessage({ type: "update_element", payload: updatePayload }); }
-	public sendUngroupElement(id: string) { this.sendMessage({ type: "ungroup_element", payload: { id } }); }
+	public sendDeleteElement(id: string) { this.sendMessage({ type: "delete_element", payload: { id } }); }
+	
+	// --- Grouping and Hierarchy Commands ---
 	public sendGroupElements(ids: string[]) { this.sendMessage({ type: "group_elements", payload: { ids } }); }
+	public sendUngroupElement(id: string) { this.sendMessage({ type: "ungroup_element", payload: { id } }); }
+	public sendReparentElement(childId: string, newParentId: string | null) { this.sendMessage({ type: "reparent_element", payload: { childId, newParentId } }); }
+	
+	// --- Stacking and Ordering Commands ---
 	public sendReorderElement(id: string, command: string) { this.sendMessage({ type: "reorder_element", payload: { id, command } }); }
-	// --- ADD THIS NEW METHOD ---
-	public sendCreateElement(elementData: object) {
-		this.sendMessage({ type: "create_element", payload: elementData });
+	public sendReorderLayer(draggedId: string, targetId: string, position: 'above' | 'below') { this.sendMessage({ type: "reorder_layer", payload: { draggedId, targetId, position } }); }
 
-	}
-	public sendReparentElement(childId: string, newParentId: string | null) {
-		this.sendMessage({ type: "reparent_element", payload: { childId, newParentId } });
-	}
-	public sendDeleteElement(id: string) {
-		this.sendMessage({ type: "delete_element", payload: { id } });
-	}
+	// --- REMOVED METHODS ---
+	// The methods `sendUpdatePathPoint` and `sendMovePathPoints` have been removed.
+	// The new `usePathEditor` will use the robust `sendElementUpdate` command instead,
+	// which simplifies both frontend and backend logic.
 }
 
 export const webSocketClient = new WebSocketClient();

@@ -1,13 +1,29 @@
+// parsec-frontend/src/properties/FillSection.tsx
 import React from 'react';
-import type { Fill, SolidFill, LinearGradientFill, ShapeElement, GradientStop } from '../state/types';
+import type { Fill, SolidFill, LinearGradientFill, GradientStop } from '../state/types';
 
 interface FillSectionProps {
-  element: ShapeElement;
-  onFillChange: (newFill: Fill) => void;
+  fill: Fill | null | undefined; // Now accepts null/undefined
+  onFillChange: (newFill: Fill | null) => void; // Can send null back
 }
 
-export const FillSection: React.FC<FillSectionProps> = ({ element, onFillChange }) => {
-  const { fill } = element;
+export const FillSection: React.FC<FillSectionProps> = ({ fill, onFillChange }) => {
+  const handleToggleFill = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      onFillChange({ type: 'solid', color: '#cccccc' }); // Add a default fill
+    } else {
+      onFillChange(null); // Remove the fill
+    }
+  };
+
+  if (!fill) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input type="checkbox" checked={false} onChange={handleToggleFill} />
+        <label style={{ color: '#aaa', fontSize: '12px' }}>Enable Fill</label>
+      </div>
+    );
+  }
 
   const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newType = e.target.value;
@@ -26,88 +42,51 @@ export const FillSection: React.FC<FillSectionProps> = ({ element, onFillChange 
   };
 
   const handleGradientStopChange = (index: number, newStop: Partial<GradientStop>) => {
-    const gradientFill = fill as LinearGradientFill;
-    const newStops = [...gradientFill.stops];
+    if (fill.type !== 'linear-gradient') return;
+    const newStops = [...fill.stops];
     newStops[index] = { ...newStops[index], ...newStop };
-    onFillChange({ ...gradientFill, stops: newStops });
+    onFillChange({ ...fill, stops: newStops });
   };
 
-  // --- Styles (self-contained) ---
-  const rowStyle: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
-  const labelStyle: React.CSSProperties = { color: '#aaa', fontSize: '12px' };
-  const inputStyle: React.CSSProperties = { width: '100px', background: '#333', border: '1px solid #555', color: 'white', padding: '4px 8px', borderRadius: '4px', textAlign: 'right' };
-  const selectStyle: React.CSSProperties = { ...inputStyle, textAlign: 'left', width: '100%' };
-
-  const renderFillEditor = () => {
-    switch (fill.type) {
-      case 'solid':
-        const solidFill = fill as SolidFill;
-        return (
-          <div style={rowStyle}>
-            <label htmlFor="fill-color-picker" style={labelStyle}>Color</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="text"
-                value={solidFill.color}
-                onChange={(e) => onFillChange({ ...solidFill, color: e.target.value })}
-                style={{ ...inputStyle, width: '70px', fontSize: '12px' }}
-              />
-              <input
-                id="fill-color-picker"
-                type="color"
-                value={solidFill.color}
-                onChange={(e) => onFillChange({ ...solidFill, color: e.target.value })}
-                style={{ width: '24px', height: '24px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
-              />
-            </div>
-          </div>
-        );
-      case 'linear-gradient':
-        const gradientFill = fill as LinearGradientFill;
-        return (
-          <div style={{ marginTop: '12px' }}>
-            <div style={rowStyle}>
-              <label style={labelStyle}>Angle</label>
-              <input
-                type="number"
-                value={gradientFill.angle}
-                onChange={e => onFillChange({ ...gradientFill, angle: parseInt(e.target.value, 10) || 0 })}
-                style={inputStyle}
-              />
-            </div>
-            {gradientFill.stops.map((stop, index) => (
-              <div key={index} style={{ borderTop: '1px solid #444', paddingTop: '8px', marginTop: '8px' }}>
-                <div style={rowStyle}>
-                  <label style={labelStyle}>Stop {index + 1} Color</label>
-                  <input type="color" value={stop.color} onChange={e => handleGradientStopChange(index, { color: e.target.value })}
-                    style={{ width: '24px', height: '24px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
-                </div>
-                <div style={rowStyle}>
-                  <label style={labelStyle}>Stop {index + 1} Position</label>
-                  <input type="range" min="0" max="1" step="0.01" value={stop.offset}
-                    onChange={e => handleGradientStopChange(index, { offset: parseFloat(e.target.value) })}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      default:
-        return null;
-    }
+  const styles = {
+    row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
+    label: { color: '#aaa', fontSize: '12px' },
+    input: { width: '100px', background: '#333', border: '1px solid #555', color: 'white', padding: '4px 8px', borderRadius: '4px', textAlign: 'right' },
+    select: { width: '100%', background: '#333', border: '1px solid #555', color: 'white', padding: '4px 8px', borderRadius: '4px', textAlign: 'left' },
   };
 
   return (
     <div>
-      <div style={rowStyle}>
-        <label style={labelStyle}>Type</label>
-        <select value={fill.type} onChange={handleTypeChange} style={selectStyle}>
+      <div style={styles.row}>
+        <label style={styles.label}>Type</label>
+        <select value={fill.type} onChange={handleTypeChange} style={styles.select}>
           <option value="solid">Solid</option>
           <option value="linear-gradient">Linear Gradient</option>
         </select>
       </div>
-      {renderFillEditor()}
+      {fill.type === 'solid' && (
+        <div style={styles.row}>
+          <label htmlFor="fill-color-picker" style={styles.label}>Color</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input type="text" value={fill.color} onChange={(e) => onFillChange({ ...fill, color: e.target.value })} style={{ ...styles.input, width: '70px', fontSize: '12px' }} />
+            <input id="fill-color-picker" type="color" value={fill.color} onChange={(e) => onFillChange({ ...fill, color: e.target.value })} style={{ width: '24px', height: '24px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} />
+          </div>
+        </div>
+      )}
+      {fill.type === 'linear-gradient' && (
+        <div style={{ marginTop: '12px' }}>
+          <div style={styles.row}>
+            <label style={styles.label}>Angle</label>
+            <input type="number" value={fill.angle} onChange={e => onFillChange({ ...fill, angle: parseInt(e.target.value, 10) || 0 })} style={styles.input} />
+          </div>
+          {fill.stops.map((stop, index) => (
+            <div key={index} style={{ borderTop: '1px solid #444', paddingTop: '8px', marginTop: '8px' }}>
+              <div style={styles.row}><label style={styles.label}>Stop {index + 1} Color</label><input type="color" value={stop.color} onChange={e => handleGradientStopChange(index, { color: e.target.value })} style={{ width: '24px', height: '24px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }} /></div>
+              <div style={styles.row}><label style={styles.label}>Stop {index + 1} Position</label><input type="range" min="0" max="1" step="0.01" value={stop.offset} onChange={e => handleGradientStopChange(index, { offset: parseFloat(e.target.value) })} style={{ width: '100%' }} /></div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

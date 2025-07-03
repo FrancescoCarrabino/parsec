@@ -1,165 +1,145 @@
 import React, { useMemo, useRef } from 'react';
 import { useAppState } from '../state/AppStateContext';
 import type { CanvasElement } from '../state/types';
-// --- CORRECTED IMPORT: DropTargetMonitor is removed ---
 import { useDrag, useDrop } from 'react-dnd';
 import { webSocketClient } from '../api/websocket_client';
 
-// A unique type for our draggable items to be recognized by react-dnd
-const ItemTypes = {
-  LAYER: 'layer',
-};
+const ItemTypes = { LAYER: 'layer' };
 
-// --- Reusable Styles ---
-const panelStyle: React.CSSProperties = {
-  width: '240px',
-  height: '100%',
-  background: '#252627',
-  color: '#ccc',
-  padding: '16px 8px',
-  boxSizing: 'border-box',
-  fontFamily: 'sans-serif',
-  fontSize: '13px',
-  borderRight: '1px solid #444',
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-};
+// --- STYLES (no changes) ---
+const panelStyle: React.CSSProperties = { width: '240px', height: '100%', background: '#252627', color: '#ccc', padding: '16px 8px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '13px', borderRight: '1px solid #444', overflowY: 'auto', display: 'flex', flexDirection: 'column' };
+const titleStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', padding: '0 8px', marginBottom: '10px', borderBottom: '1px solid #444', paddingBottom: '8px', fontSize: '16px' };
+const layerListStyle: React.CSSProperties = { flexGrow: 1, display: 'flex', flexDirection: 'column' };
 
-const titleStyle: React.CSSProperties = {
-  color: 'white',
-  fontWeight: 'bold',
-  padding: '0 8px',
-  marginBottom: '10px',
-  borderBottom: '1px solid #444',
-  paddingBottom: '8px',
-  fontSize: '16px',
-};
-
-const layerListStyle: React.CSSProperties = {
-  flexGrow: 1,
-};
-
-// --- Recursive Layer Item Component with Drag-and-Drop ---
+// --- LayerItem Component (no changes needed, it is correct) ---
 interface LayerItemProps {
   element: CanvasElement;
   depth: number;
-  allElements: CanvasElement[];
 }
-
-const LayerItem: React.FC<LayerItemProps> = ({ element, depth, allElements }) => {
+const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
   const { state, dispatch } = useAppState();
-  const ref = useRef<HTMLDivElement>(null); // Ref for the drop target div
 
-  // Setup for making this component draggable
+  const refContent = useRef<HTMLDivElement>(null);
+  const refAbove = useRef<HTMLDivElement>(null);
+  const refBelow = useRef<HTMLDivElement>(null);
+
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.LAYER,
-    item: { id: element.id },
-    collect: (monitor) => ({
-      isDragging: !!monitor.isDragging(),
-    }),
+    item: { id: element.id, parentId: element.parentId },
   }));
 
-  // Setup for making this component a drop target
-  const [{ isOver, canDrop }, drop] = useDrop(() => ({
-    accept: ItemTypes.LAYER,
-    drop: (item: { id: string }) => {
-      if (element.element_type === 'frame' || element.element_type === 'group') {
-        webSocketClient.sendReparentElement(item.id, element.id);
-      }
-    },
-    canDrop: (item: { id: string }) => {
-      if (item.id === element.id) return false;
-      const isContainer = element.element_type === 'frame' || element.element_type === 'group';
-      return isContainer;
-    },
-    // --- CORRECTED: The type for 'monitor' is inferred automatically by TypeScript ---
-    collect: (monitor) => ({
-      isOver: !!monitor.isOver(),
-      canDrop: !!monitor.canDrop(),
-    }),
-  }));
-
-  // Attach both drag and drop refs to the same DOM node
-  drag(drop(ref));
-
-  const isSelected = state.selectedElementIds.includes(element.id);
-  const handleSelect = () => { dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } }); };
-
-  const itemStyle: React.CSSProperties = {
-    padding: `4px 8px`,
-    paddingLeft: `${8 + depth * 20}px`,
-    borderRadius: '4px',
-    marginBottom: '2px',
-    cursor: 'move',
-    backgroundColor: isSelected
-      ? 'rgba(0, 122, 255, 0.4)'
-      : isOver && canDrop
-        ? 'rgba(0, 255, 122, 0.2)'
-        : 'transparent',
-    opacity: isDragging ? 0.4 : 1,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    border: isOver && canDrop ? '1px dashed rgba(0, 255, 122, 0.5)' : '1px dashed transparent',
-    transition: 'background-color 150ms ease-in-out, border 150ms ease-in-out',
+  const createDropHook = (position: 'above' | 'below' | 'on') => {
+    return useDrop(() => ({
+      accept: ItemTypes.LAYER,
+      drop: (item: { id: string, parentId: string | null }) => {
+        if (item.id === element.id) return;
+        if (position === 'on') {
+          webSocketClient.sendReparentElement(item.id, element.id);
+        } else if (item.parentId === element.parentId) {
+          webSocketClient.sendReorderLayer(item.id, element.id, position);
+        }
+      },
+      canDrop: (item) => {
+        if (item.id === element.id) return false;
+        if (position === 'on') return element.element_type === 'frame' || element.element_type === 'group';
+        return item.parentId === element.parentId;
+      },
+      collect: (monitor) => ({ isOver: monitor.isOver() && monitor.canDrop() }),
+    }));
   };
 
-  const children = (element.element_type === 'group' || element.element_type === 'frame')
-    ? allElements.filter(child => child.parentId === element.id)
-    : [];
+  const [{ isOver: isOverAbove }, dropAbove] = createDropHook('above');
+  const [{ isOver: isOverReparent }, dropReparent] = createDropHook('on');
+  const [{ isOver: isOverBelow }, dropBelow] = createDropHook('below');
 
-  const Icon = () => (
-    <span style={{ opacity: 0.8 }}>
-      {element.element_type === 'frame' ? '🖼️' : element.element_type === 'group' ? '📁' : element.element_type === 'text' ? 'T' : '📄'}
-    </span>
-  );
+  dropAbove(refAbove);
+  drag(dropReparent(refContent));
+  dropBelow(refBelow);
+
+  const isSelected = state.selectedElementIds.includes(element.id);
+  const handleSelect = () => dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } });
+
+  const dropZoneStyle: React.CSSProperties = { height: '5px' };
+  const dropIndicatorStyle: React.CSSProperties = { height: '2px', background: '#00aaff', width: '100%', transform: 'translateY(-1px)' };
+
+  const itemContentStyle: React.CSSProperties = {
+    padding: '4px 8px', marginLeft: `${depth * 20}px`, borderRadius: '4px', cursor: 'move',
+    backgroundColor: isSelected ? 'rgba(0, 122, 255, 0.4)' : isOverReparent ? 'rgba(0, 255, 122, 0.2)' : 'transparent',
+    opacity: isDragging ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '8px',
+    border: isOverReparent ? '1px dashed rgba(0, 255, 122, 0.5)' : '1px solid transparent',
+  };
+
+  const Icon = () => <span style={{ opacity: 0.8 }}>{element.element_type === 'frame' ? '🖼️' : element.element_type === 'group' ? '📁' : element.element_type === 'text' ? 'T' : element.element_type === 'ellipse' ? '○' : '📄'}</span>;
 
   return (
-    <>
-      <div ref={ref} style={itemStyle} onMouseDown={handleSelect}>
+    <div key={element.id}>
+      <div ref={refAbove} style={dropZoneStyle}>{isOverAbove && <div style={dropIndicatorStyle} />}</div>
+      <div ref={refContent} style={itemContentStyle} onMouseDown={handleSelect}>
         <Icon />
         <span>{element.name || element.id.substring(0, 8)}</span>
       </div>
-      {children.map(child => (
-        <LayerItem
-          key={child.id}
-          element={child}
-          depth={depth + 1}
-          allElements={allElements}
-        />
-      ))}
-    </>
+      <div ref={refBelow} style={dropZoneStyle}>{isOverBelow && <div style={dropIndicatorStyle} />}</div>
+    </div>
   );
 };
 
-// --- Main Layers Panel Component ---
+
+// --- Main LayersPanel Component with CORRECTED Render Logic ---
 export const LayersPanel: React.FC = () => {
   const { state } = useAppState();
   const { elements } = state;
 
-  const sortedElements = useMemo(() => {
-    return Object.values(elements).sort((a, b) => b.zIndex - a.zIndex);
-  }, [elements]);
+  // useMemo will re-calculate this entire flat list whenever `elements` changes.
+  const layerTree = useMemo(() => {
+    const tree: React.ReactNode[] = [];
+    const elementsArray = Object.values(elements);
 
-  const topLevelItems = sortedElements.filter(el => !el.parentId);
+    // This function now builds a flat array, it does not return JSX.
+    const buildTree = (parentId: string | null, depth: number) => {
+      const children = elementsArray
+        .filter(el => el.parentId === parentId)
+        .sort((a, b) => b.zIndex - a.zIndex); // Sort siblings by zIndex
+
+      children.forEach(element => {
+        // Push the component into the flat array
+        tree.push(
+          <LayerItem key={element.id} element={element} depth={depth} />
+        );
+        // Recurse to add its children to the flat array
+        buildTree(element.id, depth + 1);
+      });
+    };
+
+    buildTree(null, 0); // Start building from the root
+    return tree;
+  }, [elements]); // Dependency array ensures this runs when state updates
+
+  const [{ isOverRoot }, dropRoot] = useDrop(() => ({
+    accept: ItemTypes.LAYER,
+    drop: (item: { id: string, parentId: string | null }) => {
+      if (item.parentId) {
+        webSocketClient.sendReparentElement(item.id, null);
+      }
+    },
+    canDrop: (item) => !!item.parentId,
+    collect: (monitor) => ({ isOverRoot: monitor.isOver() && monitor.canDrop() }),
+  }));
+
+  const rootDropZoneStyle: React.CSSProperties = {
+    flexGrow: 1, backgroundColor: isOverRoot ? 'rgba(0, 255, 122, 0.1)' : 'transparent',
+    borderRadius: '8px', border: isOverRoot ? '2px dashed rgba(0, 255, 122, 0.4)' : '2px dashed transparent',
+    margin: '4px 0', transition: 'all 150ms ease-in-out',
+  };
 
   return (
     <div style={panelStyle}>
       <div style={titleStyle}>Layers</div>
       <div style={layerListStyle}>
-        {topLevelItems.length > 0 ? (
-          topLevelItems.map(element => (
-            <LayerItem
-              key={element.id}
-              element={element}
-              depth={0}
-              allElements={sortedElements}
-            />
-          ))
-        ) : (
-          <p style={{ textAlign: 'center', color: '#888', fontSize: '12px' }}>Canvas is empty</p>
-        )}
+        <div>
+          {/* Render the pre-built flat array of components */}
+          {layerTree}
+        </div>
+        <div ref={dropRoot} style={rootDropZoneStyle} />
       </div>
     </div>
   );

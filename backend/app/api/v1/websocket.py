@@ -211,6 +211,30 @@ async def websocket_endpoint(
                         "payload": {"id": an_id},
                     }
                     await manager.broadcast(json.dumps(delete_command))
+            elif msg_type == "reorder_layer":
+                logger.info(
+                    f"Received command to reorder layer {payload['draggedId']} relative to {payload['targetId']}"
+                )
+                affected_elements = workspace.reorder_layer(
+                    payload["draggedId"], payload["targetId"], payload["position"]
+                )
+                if affected_elements:
+                    update_command = {
+                        "type": "elements_updated",
+                        "payload": [el.model_dump() for el in affected_elements],
+                    }
+                    await manager.broadcast(json.dumps(update_command))
+
+            elif msg_type == "update_path_point":
+                updated_element = workspace.update_path_point(
+                    payload["id"], payload["index"], payload["x"], payload["y"]
+                )
+                if updated_element:
+                    response = {
+                        "type": "element_updated",
+                        "payload": updated_element.model_dump(),
+                    }
+                    await manager.broadcast(json.dumps(response))
     except WebSocketDisconnect:
         logger.info(f"Client disconnected cleanly: {client_host}:{client_port}")
     except Exception as e:
