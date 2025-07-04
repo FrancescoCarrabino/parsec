@@ -1,14 +1,15 @@
 // parsec-frontend/src/state/AppStateContext.tsx
 
 import React, { createContext, useReducer, useContext, Dispatch } from 'react';
-import type { AppState, Action, CanvasElement } from './types';
+import type { AppState, Action, CanvasElement, ComponentDefinition, WorkspaceState } from './types';
 
 const initialState: AppState = {
   elements: {},
+  componentDefinitions: {}, // NEW: Initialize the component definitions registry
   selectedElementIds: [],
   groupEditingId: null,
   activeTool: 'select',
-  editingElementId: null, // <-- ADD THIS
+  editingElementId: null,
 };
 
 const AppStateContext = createContext<{
@@ -21,11 +22,33 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
 
   switch (action.type) {
     case 'SET_WORKSPACE_STATE': {
-      const elementsMap = action.payload.reduce((acc, el) => {
+      // Destructure the payload which now contains elements and definitions
+      const { elements, componentDefinitions } = action.payload as WorkspaceState;
+
+      // Normalize elements into a Record by ID
+      const elementsMap = elements.reduce((acc, el) => {
         acc[el.id] = el;
         return acc;
       }, {} as Record<string, CanvasElement>);
-      return { ...state, elements: elementsMap };
+
+      // Normalize component definitions into a Record by ID
+      const definitionsMap = componentDefinitions.reduce((acc, def) => {
+        acc[def.id] = def;
+        return acc;
+      }, {} as Record<string, ComponentDefinition>);
+
+      return { ...state, elements: elementsMap, componentDefinitions: definitionsMap };
+    }
+    
+    // NEW: Handle the creation of a single new component definition
+    case 'COMPONENT_DEFINITION_CREATED': {
+        return {
+            ...state,
+            componentDefinitions: {
+                ...state.componentDefinitions,
+                [action.payload.id]: action.payload
+            }
+        };
     }
 
     case 'ELEMENT_CREATED':
@@ -97,8 +120,7 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
         editingElementId: null, // Also stop editing when changing tools
       };
     }
-
-    // --- ADD THIS NEW CASE ---
+    
     case 'SET_EDITING_ELEMENT_ID': {
       const { id } = action.payload;
       return {

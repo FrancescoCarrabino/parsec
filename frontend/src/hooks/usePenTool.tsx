@@ -49,7 +49,7 @@ export const usePenTool = (forceUpdate: () => void) => {
             width: max_x - min_x,
             height: max_y - min_y,
             fill: { type: 'solid', color: 'transparent' },
-            stroke: { type: 'solid', color: '#333333' },
+            stroke: { type: 'solid', color: '#ffffff' },
             strokeWidth: 2,
         };
 

@@ -28,21 +28,47 @@ export interface TextElement extends BaseElement {
 }
 export interface FrameElement extends BaseElement { element_type: 'frame'; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; clipsContent: boolean; cornerRadius?: number; }
 export interface PathElement extends BaseElement { element_type: 'path'; points: PathPoint[]; isClosed: boolean; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; }
-
-// --- NEW IMAGE ELEMENT INTERFACE ---
 export interface ImageElement extends BaseElement {
     element_type: 'image';
     src: string; // URL of the generated image
     prompt?: string;
 }
 
+// --- NEW: COMPONENT SYSTEM INTERFACES ---
+export interface ComponentInstanceElement extends BaseElement {
+    element_type: 'component_instance';
+    definition_id: string;
+    properties: Record<string, any>; // e.g., { "button_text": "Click Me", "icon_src": "..." }
+}
+
+export interface ComponentProperty {
+    prop_name: string;
+    target_element_id: string;
+    target_property: string;
+    prop_type: 'text' | 'image_url' | 'color';
+}
+
+export interface ComponentDefinition {
+    id: string;
+    name: string;
+    template_elements: CanvasElement[];
+    schema: ComponentProperty[];
+}
+
 // --- UPDATED UNION TYPE ---
-export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement | PathElement | ImageElement;
+export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement | PathElement | ImageElement | ComponentInstanceElement;
+
+// --- WORKSPACE STATE INTERFACE (for initial load) ---
+export interface WorkspaceState {
+    elements: CanvasElement[];
+    componentDefinitions: ComponentDefinition[];
+}
 
 export type ActiveTool = 'select' | 'rectangle' | 'text' | 'frame' | 'ellipse' | 'pen';
 
 export type AppState = {
 	elements: Record<string, CanvasElement>;
+    componentDefinitions: Record<string, ComponentDefinition>; // NEW: Registry for all components
 	selectedElementIds: string[];
 	groupEditingId: string | null;
 	activeTool: ActiveTool;
@@ -50,14 +76,15 @@ export type AppState = {
 };
 
 export type Action =
-	| { type: 'SET_WORKSPACE_STATE'; payload: CanvasElement[] }
+	| { type: 'SET_WORKSPACE_STATE'; payload: WorkspaceState } // Updated payload
 	| { type: 'ELEMENT_CREATED'; payload: CanvasElement }
 	| { type: 'ELEMENT_UPDATED'; payload: CanvasElement }
 	| { type: 'ELEMENTS_UPDATED'; payload: CanvasElement[] }
 	| { type: 'ELEMENT_DELETED'; payload: { id: string } }
+    | { type: 'COMPONENT_DEFINITION_CREATED'; payload: ComponentDefinition } // NEW
 	| { type: 'SET_SELECTION'; payload: { ids: string[] } }
 	| { type: 'ADD_TO_SELECTION'; payload: { id: string } }
-	| { type: 'REMOVE_FROM_SELECTION'; payload: { id: string } }
+	| { type: 'REMOVE_FROM_SELECTION'; payload: { id:string } }
 	| { type: 'ENTER_GROUP_EDITING'; payload: { groupId: string; elementId: string } }
 	| { type: 'EXIT_GROUP_EDITING' }
 	| { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
