@@ -11,7 +11,7 @@ export interface BaseElement { id: string; element_type: string; x: number; y: n
 export interface PathControlPoint { x: number; y: number; }
 export interface PathPoint { x: number; y: number; handleIn?: PathControlPoint; handleOut?: PathControlPoint; handleType?: 'symmetrical' | 'asymmetrical' | 'disconnected'; }
 
-// --- UPDATED TextElement INTERFACE ---
+// --- ELEMENT INTERFACES ---
 export interface ShapeElement extends BaseElement { element_type: "shape"; shape_type: "rect" | "circle" | "ellipse"; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; cornerRadius?: number; }
 export interface GroupElement extends BaseElement { element_type: 'group'; }
 export interface TextElement extends BaseElement {
@@ -19,19 +19,26 @@ export interface TextElement extends BaseElement {
     content: string;
     fontFamily: string;
     fontSize: number;
-    fontWeight: number; // ADDED
+    fontWeight: number;
     fontColor: string;
-    letterSpacing: number; // ADDED
-    lineHeight: number; // ADDED
+    letterSpacing: number;
+    lineHeight: number;
     align: 'left' | 'center' | 'right';
     verticalAlign: 'top' | 'middle' | 'bottom';
 }
 export interface FrameElement extends BaseElement { element_type: 'frame'; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; clipsContent: boolean; cornerRadius?: number; }
 export interface PathElement extends BaseElement { element_type: 'path'; points: PathPoint[]; isClosed: boolean; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; }
 
+// --- NEW IMAGE ELEMENT INTERFACE ---
+export interface ImageElement extends BaseElement {
+    element_type: 'image';
+    src: string; // URL of the generated image
+    prompt?: string;
+}
 
-// --- No changes below this line ---
-export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement | PathElement;
+// --- UPDATED UNION TYPE ---
+export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement | PathElement | ImageElement;
+
 export type ActiveTool = 'select' | 'rectangle' | 'text' | 'frame' | 'ellipse' | 'pen';
 
 export type AppState = {

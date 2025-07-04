@@ -7,9 +7,9 @@ import { ShapeComponent } from './ShapeComponent';
 import { TextComponent } from './TextComponent';
 import { PathComponent } from './PathComponent';
 import { FrameComponent } from './FrameComponent';
-import type { ShapeElement, TextElement, PathElement, FrameElement } from '../../state/types';
+import ImageComponent from './ImageComponent'; // <-- IMPORT NEW COMPONENT
+import type { ShapeElement, TextElement, PathElement, FrameElement, ImageElement } from '../../state/types'; // <-- IMPORT NEW TYPE
 
-// --- UPDATED to accept all three drag handlers ---
 interface ElementRendererProps {
 	elementId: string;
 	isVisible: boolean;
@@ -26,7 +26,7 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 
 	if (!element) return null;
 
-	// Prepare the common props to be passed down to every component.
+	// Prepare the common props for draggable elements.
 	const commonProps = { onDragStart, onDragMove, onDragEnd, onDblClick, isVisible };
 	
 	switch (element.element_type) {
@@ -36,6 +36,13 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 			return <TextComponent element={element as TextElement} {...commonProps} />;
 		case 'path':
 			return <PathComponent element={element as PathElement} {...commonProps} />;
+        
+        // --- ADDED CASE FOR IMAGE ---
+		case 'image':
+			// The `ImageComponent` will internally handle loading.
+			// It receives the same drag handlers as other elements.
+			return <ImageComponent element={element as ImageElement} {...commonProps} />;
+            
 		case 'frame':
 			// Frames are containers; their background isn't draggable itself.
 			// The draggable behavior is on the <KonvaGroup> in Canvas.tsx.
@@ -44,6 +51,8 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 			// Groups are just logical containers; they don't render anything themselves.
 			return null;
 		default:
+			// Log an error for unhandled element types to help with debugging.
+            console.error(`Unknown element type: ${(element as any).element_type}`);
 			return null;
 	}
 };

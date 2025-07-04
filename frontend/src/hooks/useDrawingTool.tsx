@@ -1,78 +1,111 @@
-import { useRef, useState } from 'react';
+// parsec-frontend/src/canvas/hooks/useDrawingTool.ts
+
+import React, { useState } from 'react';
 import { useAppState } from '../state/AppStateContext';
 import { webSocketClient } from '../api/websocket_client';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
-import { Rect } from 'react-konva';
+import { Rect, Ellipse } from 'react-konva';
 
-export const useDrawingTool = (activeTool: string) => {
-	const { dispatch } = useAppState();
-	const drawingStartPos = useRef<Vector2d>({ x: 0, y: 0 });
-	const [drawingRect, setDrawingRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+export const useDrawingTool = (forceUpdate: () => void) => {
+	const { state, dispatch } = useAppState();
+    const { activeTool } = state;
+	const [startPos, setStartPos] = useState<Vector2d | null>(null);
+	const [currentRect, setCurrentRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
 
-	const isDrawingToolActive = ['rectangle', 'frame', 'ellipse'].includes(activeTool);
+    const isDrawingToolActive = activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'frame' || activeTool === 'text';
 
 	const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-		if (!isDrawingToolActive || e.target !== e.target.getStage()) return null;
+        if (!isDrawingToolActive) return;
+        const stage = e.target.getStage();
+        if (!stage) return;
+        const pos = stage.getRelativePointerPosition();
+        if (!pos) return;
 
-		const stage = e.target.getStage();
-		if (!stage) return null;
+        // Special case for Text tool which is click-to-create
+        if (activeTool === 'text') {
+            webSocketClient.sendCreateElement({ element_type: 'text', x: pos.x, y: pos.y });
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'select' } });
+            return;
+        }
 
-		const pos = stage.getRelativePointerPosition();
-		if (!pos) return null;
-
-		drawingStartPos.current = pos;
-		setDrawingRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
-		return true;
+		setStartPos(pos);
+		setCurrentRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
+		setIsDrawing(true);
+        forceUpdate();
 	};
 
 	const onMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-		if (!drawingRect) return null;
+		if (!isDrawing || !startPos) return;
+        const stage = e.target.getStage();
+        if (!stage) return;
+        const pos = stage.getRelativePointerPosition();
+        if (!pos) return;
 
-		const stage = e.target.getStage();
-		if (!stage) return null;
-
-		const pos = stage.getRelativePointerPosition();
-		if (!pos) return null;
-
-		const startPos = drawingStartPos.current;
-		setDrawingRect({
+		setCurrentRect({
 			x: Math.min(startPos.x, pos.x),
 			y: Math.min(startPos.y, pos.y),
 			width: Math.abs(pos.x - startPos.x),
 			height: Math.abs(pos.y - startPos.y),
 		});
-		return true;
+        forceUpdate();
 	};
 
 	const onMouseUp = () => {
-		if (!drawingRect) return null;
+		if (!isDrawing || !currentRect || currentRect.width < 2 || currentRect.height < 2) {
+            cancel();
+            return;
+        }
 
-		if (drawingRect.width > 5 || drawingRect.height > 5) {
-			const newElementPayload = { x: drawingRect.x, y: drawingRect.y, width: drawingRect.width, height: drawingRect.height };
-			if (activeTool === 'rectangle') {
-				webSocketClient.sendCreateElement({ ...newElementPayload, element_type: 'shape', shape_type: 'rect', fill: { type: 'solid', color: '#cccccc' } });
-			} else if (activeTool === 'ellipse') {
-				webSocketClient.sendCreateElement({ ...newElementPayload, element_type: 'shape', shape_type: 'ellipse', fill: { type: 'solid', color: '#cccccc' } });
-			} else if (activeTool === 'frame') {
-				webSocketClient.sendCreateElement({ ...newElementPayload, element_type: 'frame', fill: { type: 'solid', color: 'rgba(70, 70, 70, 0.5)' }, stroke: { type: 'solid', color: '#888888' }, strokeWidth: 1 });
-			}
-			dispatch({ type: "SET_ACTIVE_TOOL", payload: { tool: "select" } });
+		let elementData: any = {
+			...currentRect,
+			fill: { type: 'solid', color: '#D9D9D9' },
+			stroke: { type: 'solid', color: '#000000' },
+			strokeWidth: 1,
+		};
+
+		if (activeTool === 'rectangle') {
+			elementData.element_type = 'shape';
+			elementData.shape_type = 'rect';
+		} else if (activeTool === 'ellipse') {
+			elementData.element_type = 'shape';
+			elementData.shape_type = 'ellipse';
+		} else if (activeTool === 'frame') {
+			elementData.element_type = 'frame';
+            elementData.fill = { type: 'solid', color: '#FFFFFF' };
+            elementData.stroke = null;
 		}
 
-		setDrawingRect(null);
-		return true;
+		webSocketClient.sendCreateElement(elementData);
+		cancel();
+		dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'select' } });
 	};
 
-	const preview = drawingRect ? (
-		<Rect {...drawingRect} fill="rgba(0, 122, 255, 0.3)" stroke="#007aff" strokeWidth={1} listening={false} />
+    const cancel = () => {
+        const wasDrawing = isDrawing;
+        setIsDrawing(false);
+		setStartPos(null);
+		setCurrentRect(null);
+        if (wasDrawing) {
+            forceUpdate();
+        }
+    };
+
+	const preview = isDrawing && currentRect ? (
+        activeTool === 'ellipse' ? 
+            <Ellipse
+                x={currentRect.x + currentRect.width / 2}
+                y={currentRect.y + currentRect.height / 2}
+                radiusX={currentRect.width / 2}
+                radiusY={currentRect.height / 2}
+                stroke="#007aff" strokeWidth={1} dash={[4, 4]} listening={false}
+            /> :
+            <Rect
+                {...currentRect}
+                stroke="#007aff" strokeWidth={1} dash={[4, 4]} listening={false}
+            />
 	) : null;
 
-	return {
-		onMouseDown: isDrawingToolActive ? onMouseDown : () => null,
-		onMouseMove: drawingRect ? onMouseMove : () => null,
-		onMouseUp: drawingRect ? onMouseUp : () => null,
-		preview,
-		isDrawing: !!drawingRect,
-	};
+	return { onMouseDown, onMouseMove, onMouseUp, cancel, preview, isDrawing };
 };

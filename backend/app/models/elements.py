@@ -109,5 +109,15 @@ class PathElement(Element):
     stroke: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#333333"))
     strokeWidth: float = 1
 
+class ImageElement(Element):
+    id: str = Field(default_factory=lambda: generate_id("image"))
+    element_type: Literal["image"] = "image"
+    src: str  # URL of the generated image
+    prompt: Optional[str] = None # The prompt used to generate it, for metadata
+    width: float = 1024 # Default width for models like DALL-E 3
+    height: float = 1024 # Default height
 
-AnyElement = Union[ShapeElement, FrameElement, GroupElement, TextElement, PathElement]
+# --- UPDATED UNION TYPE ---
+AnyElement = Union[
+    ShapeElement, FrameElement, GroupElement, TextElement, PathElement, ImageElement
+]

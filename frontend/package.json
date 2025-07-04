@@ -22,7 +22,8 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.1.0",
-    "react-konva": "^19.0.6"
+    "react-konva": "^19.0.6",
+    "use-image": "^1.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",

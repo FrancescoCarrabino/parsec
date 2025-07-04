@@ -1,3 +1,4 @@
+# parsec-backend/app/api/v1/websocket.py
 import json
 import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
@@ -7,6 +8,7 @@ from loguru import logger
 from ...services.workspace_service import WorkspaceService
 from ...agents.main_agent import MainAgent
 from ...agents.canvas_agent import CanvasAgent
+from ...agents.image_genius import ImageGenius # <-- IMPORT NEW AGENT
 
 router = APIRouter()
 
@@ -45,7 +47,11 @@ manager = ConnectionManager()
 # --- Dependency Injection Setup with Agent Hierarchy ---
 _workspace_service = WorkspaceService()
 _canvas_agent = CanvasAgent(workspace_service=_workspace_service)
-_main_agent = MainAgent(canvas_agent=_canvas_agent)
+_image_genius = ImageGenius(workspace_service=_workspace_service) # <-- INSTANTIATE
+_main_agent = MainAgent(
+    canvas_agent=_canvas_agent,
+    image_agent=_image_genius # <-- PROVIDE TO MAIN AGENT
+)
 
 
 def get_main_agent() -> MainAgent:
@@ -87,11 +93,14 @@ async def websocket_endpoint(
             payload = message.get("payload")
 
             if msg_type == "user_prompt":
+                # MainAgent now returns a list of commands, which could be empty
                 commands = await agent.process_prompt(
                     payload["text"], payload.get("selected_ids")
                 )
                 for command in commands:
-                    await manager.broadcast(json.dumps(command))
+                    # Ensure command is not empty before broadcasting
+                    if command:
+                        await manager.broadcast(json.dumps(command))
 
             elif msg_type == "update_element":
                 updated_element = workspace.update_element(payload["id"], payload)
@@ -144,41 +153,11 @@ async def websocket_endpoint(
                     await manager.broadcast(json.dumps(update_command))
             elif msg_type == "create_element":
                 logger.info(f"Received direct command to create element: {payload}")
-
-                # --- DIAGNOSTIC STEP 1: Check if element creation succeeds ---
                 new_element = workspace.create_element_from_payload(payload)
-                logger.info(f"WorkspaceService returned: {new_element}")
-
                 if new_element:
-                    # --- DIAGNOSTIC STEP 2: Check if data serialization succeeds ---
-                    try:
-                        element_data = new_element.model_dump()
-                        logger.info(
-                            f"Successfully dumped model to dict: {element_data}"
-                        )
-                    except Exception as e:
-                        logger.error(f"FAILED to dump Pydantic model to dict: {e}")
-                        element_data = None
-
-                    if element_data:
-                        response = {"type": "element_created", "payload": element_data}
-
-                        # --- DIAGNOSTIC STEP 3: Check the final JSON before broadcast ---
-                        try:
-                            json_response = json.dumps(response)
-                            logger.info(
-                                f"Broadcasting this JSON payload: {json_response}"
-                            )
-                        except Exception as e:
-                            logger.error(f"FAILED to serialize response to JSON: {e}")
-                            json_response = None
-
-                        if json_response:
-                            # --- DIAGNOSTIC STEP 4: The broadcast itself ---
-                            await manager.broadcast(json_response)
-                            logger.success(
-                                "<<< Broadcast command sent successfully to manager."
-                            )
+                    element_data = new_element.model_dump()
+                    response = {"type": "element_created", "payload": element_data}
+                    await manager.broadcast(json.dumps(response))
                 else:
                     logger.warning(
                         "Element creation returned None, nothing to broadcast."
@@ -202,9 +181,6 @@ async def websocket_endpoint(
                     f"Received direct command to delete element: {payload['id']}"
                 )
                 deleted_ids = workspace.delete_element(payload["id"])
-
-                # We need to broadcast a separate delete command for each deleted element
-                # so the frontend reducer can process them one by one.
                 for an_id in deleted_ids:
                     delete_command = {
                         "type": "element_deleted",

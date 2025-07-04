@@ -1,3 +1,4 @@
+# parsec-backend/app/services/workspace_service.py
 from typing import Dict, Union, List, Optional, Tuple
 from loguru import logger
 from ..models.elements import (
@@ -7,6 +8,7 @@ from ..models.elements import (
     TextElement,
     FrameElement,
     PathElement,
+    ImageElement,  # <-- IMPORT THE NEW MODEL
 )
 
 
@@ -28,14 +30,12 @@ class WorkspaceService:
         if not element:
             logger.warning(
                 f"Attempted to update non-existent element: {element_id}"
-            )  # <-- New log
+            )
             return None
 
         updated_element = element.model_copy(update=updates)
         self.elements[element_id] = updated_element
-        logger.debug(
-            f"Element updated: {element_id} with data {updates}"
-        )  # <-- Use DEBUG for verbose data
+        logger.debug(f"Element updated: {element_id} with data {updates}")
         return updated_element
 
     def get_all_elements(self) -> List[Dict]:
@@ -51,47 +51,34 @@ class WorkspaceService:
             logger.warning(f"Reorder command failed: element {element_id} not found.")
             return []
 
-        # Create a sorted list of elements by their current zIndex
         sorted_elements = sorted(self.elements.values(), key=lambda el: el.zIndex)
 
         try:
             current_index = sorted_elements.index(target_element)
         except ValueError:
-            return []  # Should not happen if element is in self.elements
+            return []
 
         if command == "BRING_FORWARD":
             if current_index < len(sorted_elements) - 1:
-                # Swap with the element in front
                 sorted_elements.insert(
                     current_index + 1, sorted_elements.pop(current_index)
                 )
-
         elif command == "SEND_BACKWARD":
             if current_index > 0:
-                # Swap with the element behind
                 sorted_elements.insert(
                     current_index - 1, sorted_elements.pop(current_index)
                 )
-
         elif command == "BRING_TO_FRONT":
-            # Move to the end of the list
             sorted_elements.append(sorted_elements.pop(current_index))
-
         elif command == "SEND_TO_BACK":
-            # Move to the beginning of the list
             sorted_elements.insert(0, sorted_elements.pop(current_index))
-
         else:
-            return []  # Unknown command
+            return []
 
-        # Re-assign zIndex values to the entire list based on the new order
-        # This is the most robust way to handle reordering.
         for i, element in enumerate(sorted_elements):
             element.zIndex = i
 
-        # The maximum zIndex might have changed. Update our counter.
         self._next_z_index = len(sorted_elements)
-
         logger.info(
             f"Reordered elements. New top element is {sorted_elements[-1].id if sorted_elements else 'None'}."
         )
@@ -109,33 +96,27 @@ class WorkspaceService:
             logger.warning("Grouping failed: no valid elements found.")
             return []
 
-        # Calculate the bounding box of the children
         min_x = min(el.x for el in children_to_group)
         min_y = min(el.y for el in children_to_group)
         max_x = max(el.x + el.width for el in children_to_group)
         max_y = max(el.y + el.height for el in children_to_group)
 
-        # The group's position and size is the bounding box
         group_x = min_x
         group_y = min_y
         group_width = max_x - min_x
         group_height = max_y - min_y
 
-        # Create the new group container
         new_group = GroupElement(
             x=group_x, y=group_y, width=group_width, height=group_height
         )
-        self.add_element(new_group)  # add_element will assign a zIndex
+        self.add_element(new_group)
 
         affected_elements = [new_group]
-
-        # Update children: set their parentId and make their positions relative to the group
         for child in children_to_group:
             child.parentId = new_group.id
-            child.x = child.x - group_x  # Position is now relative to parent
+            child.x = child.x - group_x
             child.y = child.y - group_y
             affected_elements.append(child)
-            # Update the element in the main dictionary
             self.elements[child.id] = child
 
         logger.info(
@@ -150,91 +131,53 @@ class WorkspaceService:
             return []
 
         children = [el for el in self.elements.values() if el.parentId == group_id]
-
-        # Make children top-level again and convert their coordinates back to absolute
         for child in children:
             child.parentId = None
             child.x += group.x
             child.y += group.y
-            # Re-assign z-index
             child.zIndex = self._next_z_index
             self._next_z_index += 1
 
-        # Delete the group container
         del self.elements[group_id]
-
         logger.info(f"Ungrouped {group_id}. {len(children)} children released.")
-        return children  # Return the now-independent children
+        return children
 
-    def create_element_from_payload(self, payload: Dict) -> Element | None:
-        """Creates a new element from a frontend payload and adds it to the workspace."""
+    def create_element_from_payload(self, payload: Dict) -> Optional[Element]:
+        """Creates a new element from a payload and adds it to the workspace."""
         element_type = payload.get("element_type")
 
-        if element_type == "shape":
-            try:
-                new_element = ShapeElement(**payload)
-                self.add_element(new_element)
-                logger.info(f"Created and added new ShapeElement: {new_element.id}")
-                return new_element
-            except Exception as e:
-                logger.error(f"Failed to create ShapeElement from payload: {e}")
-                return None
-        elif element_type == "text":
-            try:
-                new_element = TextElement(**payload)
-                self.add_element(new_element)
-                logger.info(f"Created and added new TextElement: {new_element.id}")
-                return new_element
-            except Exception as e:
-                logger.error(f"Failed to create TextElement from payload: {e}")
-                return None
-        elif element_type == "frame":
-            try:
-                new_element = FrameElement(**payload)
-                self.add_element(new_element)
-                logger.info(f"Created and added new FrameElement: {new_element.id}")
-                return new_element
-            except Exception as e:
-                logger.error(f"Failed to create FrameElement from payload: {e}")
-                return None
-        elif element_type == "path":
-            try:
-                points_data = payload.get("points", [])
-                if not points_data:
-                    return None
+        # The PathElement is now treated just like any other element.
+        model_map = {
+            "shape": ShapeElement,
+            "text": TextElement,
+            "frame": FrameElement,
+            "image": ImageElement,
+            "path": PathElement, # <-- Path is now part of the main map
+        }
 
-                # --- NEW: Bounding Box Calculation ---
-                all_x = [p["x"] for p in points_data]
-                all_y = [p["y"] for p in points_data]
-                min_x, max_x = min(all_x), max(all_x)
-                min_y, max_y = min(all_y), max(all_y)
+        element_model = model_map.get(element_type)
+        if not element_model:
+            logger.warning(f"Attempted to create unknown element type: {element_type}")
+            return None
 
-                # The element's position is the top-left of the bounding box
-                payload["x"] = min_x
-                payload["y"] = min_y
-                # The element's dimensions are the size of the bounding box
-                payload["width"] = max_x - min_x
-                payload["height"] = max_y - min_y
+        try:
+            # We now COMPLETELY trust the payload from the frontend.
+            # All complex calculation logic has been removed from the backend.
+            new_element = element_model(**payload)
+            self.add_element(new_element)
+            logger.info(f"Created and added new {element_type.capitalize()}Element: {new_element.id}")
+            return new_element
+        
+        except Exception as e:
+            # Added more detailed logging in case of an error.
+            logger.exception(f"Failed to create Pydantic model for {element_type} from payload.")
+            logger.error(f"Payload that caused error: {payload}")
+            return None
 
-                # Make all points relative to the new element origin (min_x, min_y)
-                relative_points = [
-                    {"x": p["x"] - min_x, "y": p["y"] - min_y} for p in points_data
-                ]
-                payload["points"] = relative_points
-                # --- END of new logic ---
+        except Exception as e:
+            logger.exception(f"Failed to create {element_type} from payload: {e}")
+            return None
 
-                new_element = PathElement(**payload)
-                self.add_element(new_element)
-                logger.info(
-                    f"Created and added new PathElement with calculated bounding box: {new_element.id}"
-                )
-                return new_element
-            except Exception as e:
-                logger.error(f"Failed to create PathElement from payload: {e}")
-                return None
-
-        logger.warning(f"Attempted to create unknown element type: {element_type}")
-        return None
 
     def _get_absolute_coords(self, element: Element) -> Tuple[float, float]:
         """Recursively calculates the absolute coordinates of an element."""
@@ -253,7 +196,6 @@ class WorkspaceService:
             logger.warning(f"Reparenting failed: child {child_id} not found.")
             return []
 
-        # 1. Get the child's current absolute coordinates on the canvas
         abs_x, abs_y = self._get_absolute_coords(child)
 
         new_parent_abs_x, new_parent_abs_y = 0, 0
@@ -266,19 +208,16 @@ class WorkspaceService:
                 return []
             new_parent_abs_x, new_parent_abs_y = self._get_absolute_coords(new_parent)
 
-        # 2. Calculate the new relative coordinates
         child.x = abs_x - new_parent_abs_x
         child.y = abs_y - new_parent_abs_y
         child.parentId = new_parent_id
-
-        # 3. Bring the child to the front of the stacking order within its new context
         child.zIndex = self._next_z_index
         self._next_z_index += 1
 
         logger.info(
             f"Reparented element {child_id} to {new_parent_id}. New relative coords: ({child.x}, {child.y})"
         )
-        return [child]  # Return the updated child
+        return [child]
 
     def delete_element(self, element_id: str) -> List[str]:
         """
@@ -289,8 +228,6 @@ class WorkspaceService:
             return []
 
         ids_to_delete = [element_id]
-
-        # Find all children recursively
         children_to_check = [element_id]
         while children_to_check:
             current_parent_id = children_to_check.pop(0)
@@ -302,7 +239,6 @@ class WorkspaceService:
             ids_to_delete.extend(children)
             children_to_check.extend(children)
 
-        # Delete all identified elements from the workspace
         deleted_ids = []
         for an_id in ids_to_delete:
             if an_id in self.elements:
@@ -326,43 +262,28 @@ class WorkspaceService:
             logger.warning("Layer reorder failed: one or more elements not found.")
             return []
 
-        # 1. Get ALL elements, sorted by their current global zIndex.
         all_elements_sorted = sorted(self.elements.values(), key=lambda el: el.zIndex)
 
-        # 2. Perform the list manipulation on the global list.
         try:
-            # Remove the dragged element from its current position
             all_elements_sorted.remove(dragged_element)
-
-            # Find the new index for the dragged element relative to the target
             target_index = all_elements_sorted.index(target_element)
-
-            # Insert it back in the correct spot
-            # NOTE: Because we render top-down (higher zIndex = higher in list),
-            # 'above' in the UI means a lower index in this zIndex-ascending list.
             if position == "above":
                 all_elements_sorted.insert(target_index + 1, dragged_element)
-            else:  # 'below'
+            else:
                 all_elements_sorted.insert(target_index, dragged_element)
-
         except ValueError:
             logger.error(
                 "Could not find element in sorted list during reorder. Aborting."
             )
             return []
 
-        # 3. Re-assign zIndex to the ENTIRE list from 0 to N-1.
-        # This is the most crucial step. It guarantees a clean, sequential, global order.
         for i, element in enumerate(all_elements_sorted):
             element.zIndex = i
-            # Update the master dictionary in place
             self.elements[element.id] = element
 
         logger.success(
             f"Successfully reordered global z-index. Dragged {dragged_id} {position} {target_id}."
         )
-
-        # 4. Return all elements, as their zIndex may have changed.
         return list(self.elements.values())
 
     def update_path_point(
@@ -370,28 +291,22 @@ class WorkspaceService:
     ) -> Optional[Element]:
         """Updates a single point of a path and correctly recalculates the element's bounds."""
         path = self.elements.get(path_id)
-        if not path or path.element_type != "path":
+        if not isinstance(path, PathElement):
             return None
-
         if point_index >= len(path.points):
             return None
 
-        # 1. Update the point with its new relative coordinate.
         path.points[point_index].x = new_x
         path.points[point_index].y = new_y
 
-        # 2. Find the new top-left corner of the internal bounding box.
         all_x = [p.x for p in path.points]
         all_y = [p.y for p in path.points]
         min_x = min(all_x)
         min_y = min(all_y)
 
-        # 3. The change (delta) in the origin is this new top-left corner.
         dx = min_x
         dy = min_y
 
-        # 4. If the origin has shifted, we MUST update the main element's position
-        #    and re-normalize ALL points to keep them relative to the new origin.
         if dx != 0 or dy != 0:
             path.x += dx
             path.y += dy
@@ -399,7 +314,6 @@ class WorkspaceService:
                 point.x -= dx
                 point.y -= dy
 
-        # 5. Finally, update the width and height based on the now-normalized points.
         all_x_normalized = [p.x for p in path.points]
         all_y_normalized = [p.y for p in path.points]
         path.width = max(all_x_normalized) - min(all_x_normalized)
