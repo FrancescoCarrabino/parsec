@@ -1,6 +1,6 @@
 # parsec-backend/app/models/elements.py
 from pydantic import BaseModel, Field, conlist
-from typing import Literal, Optional, List, Union
+from typing import Literal, Optional, List, Union, Dict, Any
 from typing_extensions import Annotated
 import uuid
 
@@ -73,17 +73,16 @@ class GroupElement(Element):
     element_type: Literal["group"] = "group"
 
 
-# --- THIS IS THE UPDATED MODEL ---
 class TextElement(Element):
     id: str = Field(default_factory=lambda: generate_id("text"))
-    element_type: Literal["text"] = "text" # Corrected from just "text"
+    element_type: Literal["text"] = "text"
     content: str = "Type something..."
-    fontFamily: str = "Inter" # A better, professional default
+    fontFamily: str = "Inter"
     fontSize: int = 16
-    fontWeight: int = 400 # Added: Maps to "Regular"
+    fontWeight: int = 400
     fontColor: str = "#000000"
-    letterSpacing: float = 0 # Added
-    lineHeight: float = 1.2 # Added
+    letterSpacing: float = 0
+    lineHeight: float = 1.2
     align: Literal["left", "center", "right"] = "left"
     verticalAlign: Literal["top", "middle", "bottom"] = "top"
     width: float = Field(default=150)
@@ -112,12 +111,36 @@ class PathElement(Element):
 class ImageElement(Element):
     id: str = Field(default_factory=lambda: generate_id("image"))
     element_type: Literal["image"] = "image"
-    src: str  # URL of the generated image
-    prompt: Optional[str] = None # The prompt used to generate it, for metadata
-    width: float = 1024 # Default width for models like DALL-E 3
-    height: float = 1024 # Default height
+    src: str
+    prompt: Optional[str] = None
+    width: float = 1024
+    height: float = 1024
+
+# --- NEW COMPONENT-RELATED MODELS ---
+
+class ComponentProperty(BaseModel):
+    """Defines a single customizable property within a component's schema."""
+    prop_name: str  # e.g., "button_text", "user_avatar_src"
+    target_element_id: str  # The ID of the element within the template this property controls
+    target_property: str  # e.g., "content" for TextElement, "src" for ImageElement
+    prop_type: Literal["text", "image_url", "color"] = "text"
+
+class ComponentDefinition(BaseModel):
+    """The master template for a component. This is NOT a canvas element itself."""
+    id: str = Field(default_factory=lambda: generate_id("compdef"))
+    name: str  # e.g., "User Profile Card"
+    template_elements: List[Dict[str, Any]] # Raw element data, not Pydantic models
+    schema: List[ComponentProperty] = []
+
+class ComponentInstanceElement(Element):
+    """An actual instance of a component on the canvas. This IS a canvas element."""
+    id: str = Field(default_factory=lambda: generate_id("compinst"))
+    element_type: Literal["component_instance"] = "component_instance"
+    definition_id: str
+    properties: Dict[str, Any] = Field(default_factory=dict)
 
 # --- UPDATED UNION TYPE ---
 AnyElement = Union[
-    ShapeElement, FrameElement, GroupElement, TextElement, PathElement, ImageElement
+    ShapeElement, FrameElement, GroupElement, TextElement, PathElement, ImageElement,
+    ComponentInstanceElement  # <-- ADDED
 ]

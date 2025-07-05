@@ -8,30 +8,41 @@ import { TextComponent } from './TextComponent';
 import { PathComponent } from './PathComponent';
 import { FrameComponent } from './FrameComponent';
 import ImageComponent from './ImageComponent';
-import { Group, Rect } from 'react-konva'; // NEW: Import Group and Rect for component rendering
+import { Group, Rect } from 'react-konva';
 import type {
     ShapeElement, TextElement, PathElement, FrameElement,
-    ImageElement, ComponentInstanceElement, CanvasElement // NEW: Import component types
+    ImageElement, ComponentInstanceElement, CanvasElement, ComponentDefinition
 } from '../../state/types';
+
 
 // ====================================================================================
 // NEW: Recursive Renderer for Component Children
 // This is a simplified renderer used only for drawing the elements INSIDE a component.
-// These inner elements are not individually interactive; they are part of the larger component.
 // ====================================================================================
-const RecursiveElementRenderer: React.FC<{ element: CanvasElement, instanceProps: Record<string, any> }> = ({ element, instanceProps }) => {
-    // --- Property Overriding Logic ---
-    // Check if this child element's properties are controlled by the parent instance.
-    // We create a copy of the element and override its properties if necessary.
-    const customizedElement = { ...element };
+const RecursiveElementRenderer: React.FC<{
+    element: CanvasElement;
+    definition: ComponentDefinition;
+    instance: ComponentInstanceElement;
+}> = ({ element, definition, instance }) => {
     
-    // Example of overriding a text element's content. This can be expanded.
-    // Note: The backend schema ensures `target_property` and `prop_name` are linked.
-    if (customizedElement.element_type === 'text' && instanceProps[`${customizedElement.id}_content`]) {
-        customizedElement.content = instanceProps[`${customizedElement.id}_content`];
-    }
-    // Future overrides (e.g., for image `src` or shape `fill`) would go here.
+    // --- THIS IS THE CORE OVERRIDE LOGIC ---
+    // Start with a copy of the template element's data.
+    const customizedElement = { ...element };
 
+    // Go through the component's schema to see if any properties target this child element.
+    for (const prop of definition.schema) {
+        if (prop.target_element_id === element.id) {
+            const overrideValue = instance.properties[prop.prop_name];
+            // If the instance has a value for this property, apply it.
+            if (overrideValue !== undefined) {
+                // Use a type assertion to allow dynamic property setting.
+                (customizedElement as any)[prop.target_property] = overrideValue;
+            }
+        }
+    }
+    // --- END OF CORE OVERRIDE LOGIC ---
+
+    // Render the element using its (potentially customized) data.
     switch (customizedElement.element_type) {
         case 'shape':
             return <ShapeComponent element={customizedElement as ShapeElement} isVisible={true} />;
@@ -41,7 +52,6 @@ const RecursiveElementRenderer: React.FC<{ element: CanvasElement, instanceProps
             return <PathComponent element={customizedElement as PathElement} isVisible={true} />;
         case 'image':
             return <ImageComponent element={customizedElement as ImageElement} isVisible={true} />;
-        // Note: We don't render frames or groups recursively inside components for simplicity.
         default:
             return null;
     }
@@ -79,12 +89,10 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 		case 'image':
 			return <ImageComponent element={element as ImageElement} {...commonProps} />;
         
-        // --- NEW CASE FOR COMPONENT INSTANCE ---
         case 'component_instance': {
             const instance = element as ComponentInstanceElement;
             const definition = state.componentDefinitions[instance.definition_id];
 
-            // If the definition hasn't loaded yet, render nothing. This prevents crashes.
             if (!definition) {
                 console.warn(`Component definition ${instance.definition_id} not found for instance ${instance.id}`);
                 return null;
@@ -110,17 +118,12 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
                         <RecursiveElementRenderer
                             key={childElement.id}
                             element={childElement}
-                            instanceProps={instance.properties}
+                            definition={definition} // Pass down the full definition
+                            instance={instance}     // Pass down the instance
                         />
                     ))}
-                    {/* The "Hitbox" Pattern: A transparent rectangle that covers the
-                        entire component. This ensures the component is easily and reliably
-                        selectable/draggable, even if it has empty spaces. It must be last. */}
-                    <Rect
-                        width={instance.width}
-                        height={instance.height}
-                        fill="transparent"
-                    />
+                    {/* The "Hitbox" */}
+                    <Rect width={instance.width} height={instance.height} fill="transparent" />
                 </Group>
             );
         }

@@ -9,39 +9,29 @@ from ...services.workspace_service import WorkspaceService
 from ...agents.main_agent import MainAgent
 from ...agents.canvas_agent import CanvasAgent
 from ...agents.image_genius import ImageGenius
-from ...agents.layout_maestro import LayoutMaestro  # <-- IMPORT 1
-from ...agents.shared_tools import CommonCanvasTools  # <-- IMPORT 2
+from ...agents.layout_maestro import LayoutMaestro
+from ...agents.component_crafter import ComponentCrafter # NEW: Import ComponentCrafter
+from ...agents.shared_tools import CommonCanvasTools
 
 router = APIRouter()
 
-
 class ConnectionManager:
-    """Manages active WebSocket connections."""
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
+    # ... (no changes to this class)
+    def __init__(self): self.active_connections: List[WebSocket] = []
+    async def connect(self, websocket: WebSocket): await websocket.accept(); self.active_connections.append(websocket)
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-
+        if websocket in self.active_connections: self.active_connections.remove(websocket)
     async def broadcast(self, message: str):
-        """Broadcasts a message to all active WebSocket connections concurrently."""
-        if not self.active_connections:
-            return
+        if not self.active_connections: return
         tasks = [conn.send_text(message) for conn in self.active_connections]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for result in results:
-            if isinstance(result, Exception):
-                logger.warning(f"Failed to send message to a closing client: {result}")
+            if isinstance(result, Exception): logger.warning(f"Failed to send message to a closing client: {result}")
 
 
 manager = ConnectionManager()
 
-# --- Dependency Injection Setup with Agent Hierarchy ---
+# --- UPDATED Dependency Injection Setup with Agent Hierarchy ---
 # 1. Create the foundational services and tools
 _workspace_service = WorkspaceService()
 _common_tools = CommonCanvasTools(workspace_service=_workspace_service)
@@ -49,25 +39,21 @@ _common_tools = CommonCanvasTools(workspace_service=_workspace_service)
 # 2. Create the specialist agents, providing them with necessary dependencies
 _canvas_agent = CanvasAgent(workspace_service=_workspace_service, common_tools=_common_tools)
 _image_genius = ImageGenius(workspace_service=_workspace_service)
-_layout_maestro = LayoutMaestro(common_tools=_common_tools) # <-- INSTANTIATE
-
+_layout_maestro = LayoutMaestro(common_tools=_common_tools)
+_component_crafter = ComponentCrafter(workspace_service=_workspace_service, common_tools=_common_tools)
 # 3. Create the main orchestrator agent, providing it with all specialists
 _main_agent = MainAgent(
     canvas_agent=_canvas_agent,
     image_agent=_image_genius,
-    layout_agent=_layout_maestro, # <-- PROVIDE TO MAIN AGENT
+    layout_agent=_layout_maestro,
+    component_agent=_component_crafter, # NEW: Provide the crafter to the MainAgent
 )
 
+# ... (no changes to get_main_agent or get_workspace_service)
+def get_main_agent() -> MainAgent: return _main_agent
+def get_workspace_service() -> WorkspaceService: return _workspace_service
 
-def get_main_agent() -> MainAgent:
-    return _main_agent
-
-
-def get_workspace_service() -> WorkspaceService:
-    return _workspace_service
-
-
-# --------------------------------------------------------
+# --- END Dependency Injection Setup ---
 
 
 @router.websocket("/ws")

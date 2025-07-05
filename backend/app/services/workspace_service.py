@@ -1,23 +1,30 @@
-# parsec-backend/app/services/workspace_service.py
 from typing import Dict, Union, List, Optional, Tuple
 from loguru import logger
 from ..models.elements import (
     Element,
+    AnyElement, # IMPORT AnyElement to correctly type the elements dictionary
     ShapeElement,
     GroupElement,
     TextElement,
     FrameElement,
     PathElement,
-    ImageElement,  # <-- IMPORT THE NEW MODEL
+    ImageElement,
+    ComponentDefinition,  # NEW: Import ComponentDefinition
+    ComponentInstanceElement, # NEW: Import ComponentInstanceElement
+    ComponentProperty, # NEW: Import ComponentProperty
 )
 
 
 class WorkspaceService:
     def __init__(self):
-        self.elements: Dict[str, Element] = {}
-        self._next_z_index = 1  # Private counter for z-index
-        logger.info("WorkspaceService initialized.")
+        # The elements dict is now correctly typed with AnyElement
+        self.elements: Dict[str, AnyElement] = {}
+        # NEW: Add a registry for component definitions
+        self.component_definitions: Dict[str, ComponentDefinition] = {}
+        self._next_z_index = 1
+        logger.info("WorkspaceService initialized with Component Definition Registry.")
 
+    # --- No changes to add_element, update_element ---
     def add_element(self, element: Element) -> None:
         """Adds a new element and assigns it the highest z-index."""
         element.zIndex = self._next_z_index
@@ -25,7 +32,7 @@ class WorkspaceService:
         self.elements[element.id] = element
         logger.info(f"Element added: {element.id} with zIndex {element.zIndex}")
 
-    def update_element(self, element_id: str, updates: Dict) -> Element | None:
+    def update_element(self, element_id: str, updates: Dict) -> Optional[AnyElement]:
         element = self.elements.get(element_id)
         if not element:
             logger.warning(
@@ -33,13 +40,89 @@ class WorkspaceService:
             )
             return None
 
-        updated_element = element.model_copy(update=updates)
+        # Pydantic v2 requires that we use model_validate to apply updates to a union type
+        updated_data = element.model_dump()
+        updated_data.update(updates)
+
+        # Re-validate the data against the correct model type
+        updated_element = type(element)(**updated_data)
+
         self.elements[element_id] = updated_element
         logger.debug(f"Element updated: {element_id} with data {updates}")
         return updated_element
 
+
     def get_all_elements(self) -> List[Dict]:
         return [element.model_dump() for element in self.elements.values()]
+
+    # NEW: Method to get all component definitions for the frontend
+    def get_all_component_definitions(self) -> List[Dict]:
+        """Returns a list of all component definitions."""
+        return [definition.model_dump() for definition in self.component_definitions.values()]
+
+    # NEW: Core method for creating a component
+    def create_component_from_elements(
+        self, name: str, source_element_ids: List[str], schema: List[Dict]
+    ) -> Tuple[Optional[ComponentDefinition], Optional[ComponentInstanceElement], List[str]]:
+        """
+        Creates a new ComponentDefinition from a list of elements, replaces them
+        with a ComponentInstanceElement, and returns all affected objects.
+        """
+        source_elements = [self.elements.get(eid) for eid in source_element_ids if self.elements.get(eid)]
+        if not source_elements:
+            logger.warning("Component creation failed: no valid source elements found.")
+            return None, None, []
+
+        # 1. Calculate the bounding box of the source elements
+        min_x = min(el.x for el in source_elements)
+        min_y = min(el.y for el in source_elements)
+        max_x = max(el.x + el.width for el in source_elements)
+        max_y = max(el.y + el.height for el in source_elements)
+        comp_x, comp_y = min_x, min_y
+        comp_width, comp_height = max_x - min_x, max_y - min_y
+
+        # 2. Create the template elements with positions relative to the new component's origin
+        template_elements = []
+        for el in source_elements:
+            el_copy = el.model_copy()
+            el_copy.x -= comp_x
+            el_copy.y -= comp_y
+            template_elements.append(el_copy.model_dump())
+
+        # 3. Create and register the new component definition
+        parsed_schema = [ComponentProperty(**s) for s in schema]
+        new_definition = ComponentDefinition(name=name, template_elements=template_elements, schema=parsed_schema)
+        self.component_definitions[new_definition.id] = new_definition
+        logger.success(f"Created new ComponentDefinition '{name}' ({new_definition.id})")
+
+        # 4. Create the first instance of this component
+        initial_properties = {}
+        for prop in new_definition.schema:
+            source_element = next((el for el in source_elements if el.id == prop.target_element_id), None)
+            if source_element:
+                initial_properties[prop.prop_name] = getattr(source_element, prop.target_property, None)
+
+        instance_payload = {
+            "element_type": "component_instance",
+            "definition_id": new_definition.id,
+            "x": comp_x,
+            "y": comp_y,
+            "width": comp_width,
+            "height": comp_height,
+            "properties": initial_properties,
+            "name": name,
+        }
+        new_instance = self.create_element_from_payload(instance_payload)
+
+        if not new_instance: # Safety check: rollback if instance creation fails
+            del self.component_definitions[new_definition.id]
+            logger.error("Failed to create component instance, rolled back definition creation.")
+            return None, None, []
+
+        # 5. Delete the original source elements
+        deleted_ids = self.delete_elements(source_element_ids)
+
+        return new_definition, new_instance, deleted_ids
 
     def reorder_element(self, element_id: str, command: str) -> List[Element]:
         """
@@ -142,17 +225,17 @@ class WorkspaceService:
         logger.info(f"Ungrouped {group_id}. {len(children)} children released.")
         return children
 
-    def create_element_from_payload(self, payload: Dict) -> Optional[Element]:
+    def create_element_from_payload(self, payload: Dict) -> Optional[AnyElement]:
         """Creates a new element from a payload and adds it to the workspace."""
         element_type = payload.get("element_type")
 
-        # The PathElement is now treated just like any other element.
         model_map = {
             "shape": ShapeElement,
             "text": TextElement,
             "frame": FrameElement,
             "image": ImageElement,
-            "path": PathElement, # <-- Path is now part of the main map
+            "path": PathElement,
+            "component_instance": ComponentInstanceElement, # <-- ADDED
         }
 
         element_model = model_map.get(element_type)
@@ -161,23 +244,14 @@ class WorkspaceService:
             return None
 
         try:
-            # We now COMPLETELY trust the payload from the frontend.
-            # All complex calculation logic has been removed from the backend.
             new_element = element_model(**payload)
             self.add_element(new_element)
-            logger.info(f"Created and added new {element_type.capitalize()}Element: {new_element.id}")
+            logger.info(f"Created and added new {element_type.capitalize()}: {new_element.id}")
             return new_element
-        
-        except Exception as e:
-            # Added more detailed logging in case of an error.
+        except Exception:
             logger.exception(f"Failed to create Pydantic model for {element_type} from payload.")
             logger.error(f"Payload that caused error: {payload}")
             return None
-
-        except Exception as e:
-            logger.exception(f"Failed to create {element_type} from payload: {e}")
-            return None
-
 
     def _get_absolute_coords(self, element: Element) -> Tuple[float, float]:
         """Recursively calculates the absolute coordinates of an element."""
@@ -247,6 +321,13 @@ class WorkspaceService:
 
         logger.info(f"Deleted elements with IDs: {deleted_ids}")
         return deleted_ids
+
+    def delete_elements(self, element_ids: List[str]) -> List[str]:
+        # Helper method for deleting multiple elements at once.
+        all_deleted_ids = []
+        for eid in element_ids:
+            all_deleted_ids.extend(self.delete_element(eid))
+        return list(set(all_deleted_ids)) # Return unique IDs
 
     def reorder_layer(
         self, dragged_id: str, target_id: str, position: str
