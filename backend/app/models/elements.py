@@ -97,6 +97,9 @@ class FrameElement(Element):
     strokeWidth: float = 1
     clipsContent: bool = True
     cornerRadius: float = 0
+    # --- NEW FIELDS ---
+    speakerNotes: str = Field(default="", description="Private notes for the presenter.")
+    presentationOrder: Optional[int] = Field(default=None, description="The 0-based index of the frame in the presentation sequence. Null if not in presentation.")
 
 
 class PathElement(Element):

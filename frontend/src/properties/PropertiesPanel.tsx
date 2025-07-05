@@ -1,5 +1,4 @@
 // parsec-frontend/src/properties/PropertiesPanel.tsx
-
 import React from 'react';
 import { useAppState } from '../state/AppStateContext';
 import { webSocketClient } from '../api/websocket_client';
@@ -7,15 +6,40 @@ import type { ShapeElement, TextElement, FrameElement, PathElement, Fill, Canvas
 import { FillSection } from './FillSection';
 import { TextPropertiesSection } from './TextPropertiesSection';
 import { InstancePropertiesSection } from './InstancePropertiesSection';
-// CORRECTED: Import from the new shared file.
 import { PropertyGroup, PropertyRow, PropertyLabel, StringInput } from './CommonControls';
-
 
 const panelStyle: React.CSSProperties = { width: '280px', height: '100%', background: '#252627', color: '#ccc', padding: '16px', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '14px', zIndex: 10, borderLeft: '1px solid #444', overflowY: 'auto' };
 const titleStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', marginBottom: '10px', fontSize: '16px' };
 const buttonStyle: React.CSSProperties = { background: '#3a3d40', border: '1px solid #555', color: '#ccc', padding: '8px', borderRadius: '4px', cursor: 'pointer', width: '100%' };
 const arrangeButtonStyle: React.CSSProperties = { ...buttonStyle, padding: '4px' };
 const disabledButtonStyle: React.CSSProperties = { ...buttonStyle, cursor: 'not-allowed', opacity: 0.4 };
+
+// NEW: Speaker Notes Text Area Component
+const SpeakerNotesSection: React.FC<{ element: FrameElement; onUpdate: (prop: string, val: any) => void; }> = ({ element, onUpdate }) => {
+  return (
+    <PropertyGroup title="Speaker Notes">
+      <textarea
+        value={element.speakerNotes}
+        onChange={(e) => onUpdate('speakerNotes', e.target.value)}
+        placeholder="Type your notes here..."
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          height: '120px',
+          background: '#1e1e1e',
+          color: '#ccc',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          padding: '8px',
+          fontFamily: 'inherit',
+          fontSize: '13px',
+          resize: 'vertical'
+        }}
+      />
+    </PropertyGroup>
+  );
+};
+
 
 const PropertyInput = ({ label, propName, type = 'number', element, onUpdate }: { label: string; propName: string; type?: string; element: CanvasElement; onUpdate: (prop: string, val: any) => void; }) => {
   const value = element[propName as keyof typeof element] ?? (type === 'number' ? 0 : '');
@@ -71,7 +95,21 @@ export const PropertiesPanel: React.FC = () => {
         </PropertyGroup>
       </>)}
       {cornerElement && <PropertyGroup title="Corners"><PropertyInput label="Radius" propName="cornerRadius" element={selectedElement} onUpdate={handlePropertyChange} /></PropertyGroup>}
-      {frameElement && <PropertyGroup title="Frame"><PropertyRow><PropertyLabel>Clip content</PropertyLabel><input type="checkbox" checked={frameElement.clipsContent} onChange={(e) => handlePropertyChange('clipsContent', e.target.checked)} style={{ width: '20px', height: '20px' }} /></PropertyRow></PropertyGroup>}
+      
+      {/* --- NEW SECTION FOR FRAME-SPECIFIC PROPERTIES --- */}
+      {frameElement && (
+        <>
+          <PropertyGroup title="Frame">
+            <PropertyRow>
+              <PropertyLabel>Clip content</PropertyLabel>
+              <input type="checkbox" checked={frameElement.clipsContent} onChange={(e) => handlePropertyChange('clipsContent', e.target.checked)} style={{ width: '20px', height: '20px' }} />
+            </PropertyRow>
+          </PropertyGroup>
+          {/* Render the new Speaker Notes section here */}
+          <SpeakerNotesSection element={frameElement} onUpdate={handlePropertyChange} />
+        </>
+      )}
+
       <PropertyGroup title="Arrange"><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}><button onClick={() => handleArrange('BRING_FORWARD')} style={arrangeButtonStyle}>Forward</button><button onClick={() => handleArrange('SEND_BACKWARD')} style={arrangeButtonStyle}>Backward</button><button onClick={() => handleArrange('BRING_TO_FRONT')} style={arrangeButtonStyle}>To Front</button><button onClick={() => handleArrange('SEND_TO_BACK')} style={arrangeButtonStyle}>To Back</button></div></PropertyGroup>
     </div>
   );

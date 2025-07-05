@@ -70,6 +70,23 @@ class WebSocketClient {
 	public sendReorderElement(id: string, command: string) { this.sendMessage({ type: "reorder_element", payload: { id, command } }); }
 	public sendReorderLayer(draggedId: string, targetId: string, position: 'above' | 'below') { this.sendMessage({ type: "reorder_layer", payload: { draggedId, targetId, position } }); }
 
+    public sendUpdatePresentationOrder(payload: { action: 'set', ordered_frame_ids: string[] } | { action: 'add', frame_id: string }) {
+        this.sendMessage({
+            type: "update_presentation_order",
+            payload: payload,
+        });
+    }
+    public sendReorderSlide(draggedId: string, targetId: string, position: 'above' | 'below') {
+        this.sendMessage({
+            type: "reorder_slide",
+            payload: {
+                dragged_id: draggedId,
+                target_id: targetId,
+                position: position,
+            },
+        });
+    }
+
 	// --- REMOVED METHODS ---
 	// The methods `sendUpdatePathPoint` and `sendMovePathPoints` have been removed.
 	// The new `usePathEditor` will use the robust `sendElementUpdate` command instead,

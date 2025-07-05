@@ -405,3 +405,105 @@ class WorkspaceService:
             f"Updated point {point_index} for path {path_id} and recalculated bounds."
         )
         return path
+
+    def update_presentation_order(self, payload: dict) -> List[AnyElement]:
+        """
+        DEFINITIVE V2: Handles multiple presentation order actions based on a payload.
+        - "action": "set", "ordered_frame_ids": [...] -> Replaces the entire order.
+        - "action": "add", "frame_id": "..." -> Appends a frame to the end.
+        """
+        action = payload.get("action")
+        logger.info(f"Updating presentation order with action '{action}'")
+
+        # Get the current, canonical list of slides from the backend state.
+        current_slides = [
+            el for el in self.elements.values()
+            if isinstance(el, FrameElement) and el.presentationOrder is not None
+        ]
+        current_slides.sort(key=lambda el: el.presentationOrder)
+
+        if action == "set":
+            # This logic is for reordering, which is already working.
+            ordered_frame_ids = payload.get("ordered_frame_ids", [])
+            return self._set_presentation_order(ordered_frame_ids)
+        
+        elif action == "add":
+            # THIS IS THE NEW LOGIC FOR THE DROP
+            frame_id_to_add = payload.get("frame_id")
+            if not frame_id_to_add: return []
+
+            # Get the current list of slide IDs and append the new one.
+            new_ordered_ids = [s.id for s in current_slides]
+            if frame_id_to_add not in new_ordered_ids:
+                new_ordered_ids.append(frame_id_to_add)
+            
+            return self._set_presentation_order(new_ordered_ids)
+
+        return []
+
+    def _set_presentation_order(self, ordered_frame_ids: List[str]) -> List[AnyElement]:
+        """Private helper to atomically set the order from a complete list of IDs."""
+        elements_to_broadcast = []
+        ids_in_new_presentation = set(ordered_frame_ids)
+
+        for element in self.elements.values():
+            if isinstance(element, FrameElement):
+                if element.id in ids_in_new_presentation:
+                    element.presentationOrder = ordered_frame_ids.index(element.id)
+                    elements_to_broadcast.append(element)
+                elif element.presentationOrder is not None:
+                    element.presentationOrder = None
+                    elements_to_broadcast.append(element)
+        
+        logger.success(f"Presentation order set. Broadcasting {len(elements_to_broadcast)} elements.")
+        return elements_to_broadcast
+
+    def reorder_slide(self, dragged_id: str, target_id: str, position: str) -> List[AnyElement]:
+        """
+        Reorders a slide relative to a target slide based on user intent.
+        This is the new, robust method for managing presentation order.
+        'position' can be 'above' or 'below'.
+        """
+        logger.info(f"Received reorder slide intent: Move {dragged_id} {position} {target_id}")
+
+        # 1. Get all current slides from the canonical backend state.
+        current_slides = [
+            el for el in self.elements.values()
+            if isinstance(el, FrameElement) and el.presentationOrder is not None
+        ]
+        if not current_slides:
+            logger.warning("Reorder failed: No slides found in presentation.")
+            return []
+        
+        # 2. Sort them to get the current, correct order.
+        current_slides.sort(key=lambda el: el.presentationOrder)
+
+        # 3. Find the dragged element in the list.
+        dragged_element = next((el for el in current_slides if el.id == dragged_id), None)
+        if not dragged_element:
+            logger.warning(f"Reorder failed: Dragged element {dragged_id} is not a slide.")
+            return []
+
+        # 4. Perform the re-ordering operation.
+        current_slides.remove(dragged_element)
+        
+        try:
+            target_index = current_slides.index(next(el for el in current_slides if el.id == target_id))
+            # Insert the dragged element relative to the target.
+            # 'below' in UI terms means a higher index. 'above' means a lower index.
+            if position == 'below':
+                current_slides.insert(target_index + 1, dragged_element)
+            else: # 'above'
+                current_slides.insert(target_index, dragged_element)
+        except (StopIteration, ValueError):
+            logger.error(f"Reorder failed: Target element {target_id} not found.")
+            return [] # Abort if the target doesn't exist
+
+        # 5. Atomically update the `presentationOrder` for the new list.
+        for i, slide in enumerate(current_slides):
+            slide.presentationOrder = i
+            
+        logger.success("Successfully reordered slides.")
+        
+        # 6. Return the FULL list of updated slides to sync the client.
+        return current_slides
