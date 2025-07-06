@@ -1,46 +1,98 @@
 // parsec-frontend/src/components/ComponentsPanel.tsx
+
 import React from 'react';
 import { useAppState } from '../state/AppStateContext';
 import type { ComponentDefinition } from '../state/types';
 
-// ... (All styles are correct)
-const PanelStyles: React.CSSProperties = { width: '260px', background: '#25282c', color: '#ffffff', padding: '8px', display: 'flex', flexDirection: 'column', fontFamily: 'sans-serif', borderLeft: '1px solid #444' };
-const HeaderStyles: React.CSSProperties = { fontSize: '14px', fontWeight: 'bold', padding: '8px', borderBottom: '1px solid #444', marginBottom: '8px' };
-const ComponentItemStyles: React.CSSProperties = { padding: '10px', background: '#3a3d40', borderRadius: '4px', marginBottom: '8px', cursor: 'grab', userSelect: 'none' };
+const panelStyle: React.CSSProperties = {
+  width: '260px',
+  background: '#25282B',
+  color: '#FFFFFF',
+  padding: '8px',
+  display: 'flex',
+  flexDirection: 'column',
+  fontFamily: 'sans-serif',
+};
 
+const headerStyle: React.CSSProperties = {
+  fontSize: '14px',
+  fontWeight: 'bold',
+  padding: '8px 4px',
+  borderBottom: '1px solid #444',
+  marginBottom: '8px',
+};
+
+const componentItemStyle: React.CSSProperties = {
+  background: '#333639',
+  padding: '10px 8px',
+  borderRadius: '4px',
+  marginBottom: '8px',
+  cursor: 'grab',
+  userSelect: 'none', // Prevent text selection while dragging
+  border: '1px solid #444',
+};
+
+const componentNameStyle: React.CSSProperties = {
+  fontWeight: 'bold',
+  marginBottom: '4px',
+};
+
+const componentInfoStyle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#999',
+};
+
+
+// A single draggable item in the panel
 const ComponentItem: React.FC<{ definition: ComponentDefinition }> = ({ definition }) => {
+
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-    const data = JSON.stringify({
-      type: 'parsec-component',
-      definitionId: definition.id,
-      offsetX,
-      offsetY,
-    });
     e.dataTransfer.effectAllowed = 'copy';
-    e.dataTransfer.setData('text/plain', data);
+
+    // This is where we package the data for the drop event
+    const dragData = {
+      definitionId: definition.id,
+      // We calculate the cursor's position within the dragged item as a ratio.
+      // This allows the Canvas to place the item correctly, not just from its top-left.
+      offsetX: e.nativeEvent.offsetX / e.currentTarget.offsetWidth,
+      offsetY: e.nativeEvent.offsetY / e.currentTarget.offsetHeight,
+    };
+    
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
   };
 
   return (
-    <div style={ComponentItemStyles} draggable onDragStart={handleDragStart}>
-      {definition.name}
+    <div
+      style={componentItemStyle}
+      draggable="true"
+      onDragStart={handleDragStart}
+    >
+      <div style={componentNameStyle}>{definition.name}</div>
+      <div style={componentInfoStyle}>
+        {definition.template_elements.length} elements
+      </div>
     </div>
   );
 };
 
+
+// The main panel component
 export const ComponentsPanel = () => {
   const { state } = useAppState();
-  const definitions = Object.values(state.componentDefinitions);
+  const componentDefinitions = Object.values(state.componentDefinitions);
+
   return (
-    <aside style={PanelStyles}>
-      <div style={HeaderStyles}>Components</div>
-      {definitions.length > 0 ? (
-        definitions.map(def => <ComponentItem key={def.id} definition={def} />)
+    <div style={panelStyle}>
+      <div style={headerStyle}>Components</div>
+      {componentDefinitions.length === 0 ? (
+        <div style={{...componentInfoStyle, padding: '8px'}}>
+          No components defined yet. Select elements and use the AI prompt to create one.
+        </div>
       ) : (
-        <p style={{ fontSize: '12px', color: '#888', padding: '8px' }}>Create a component to see it here.</p>
+        componentDefinitions.map(def => (
+          <ComponentItem key={def.id} definition={def} />
+        ))
       )}
-    </aside>
+    </div>
   );
 };

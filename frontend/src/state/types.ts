@@ -1,5 +1,4 @@
 // parsec-frontend/src/state/types.ts
-
 // --- No changes to Fill types ---
 export interface SolidFill { type: 'solid'; color: string; }
 export interface GradientStop { color: string; offset: number; }
@@ -26,7 +25,19 @@ export interface TextElement extends BaseElement {
     align: 'left' | 'center' | 'right';
     verticalAlign: 'top' | 'middle' | 'bottom';
 }
-export interface FrameElement extends BaseElement { element_type: 'frame'; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; clipsContent: boolean; cornerRadius?: number; }
+
+// MODIFIED: FrameElement now includes presentation-specific properties
+export interface FrameElement extends BaseElement {
+    element_type: 'frame';
+    fill?: Fill | null;
+    stroke?: Fill | null;
+    strokeWidth: number;
+    clipsContent: boolean;
+    cornerRadius?: number;
+    speakerNotes: string;         // <-- NEW
+    presentationOrder: number | null; // <-- NEW
+}
+
 export interface PathElement extends BaseElement { element_type: 'path'; points: PathPoint[]; isClosed: boolean; fill?: Fill | null; stroke?: Fill | null; strokeWidth: number; }
 export interface ImageElement extends BaseElement {
     element_type: 'image';
@@ -34,11 +45,10 @@ export interface ImageElement extends BaseElement {
     prompt?: string;
 }
 
-// --- NEW: COMPONENT SYSTEM INTERFACES ---
 export interface ComponentInstanceElement extends BaseElement {
     element_type: 'component_instance';
     definition_id: string;
-    properties: Record<string, any>; // e.g., { "button_text": "Click Me", "icon_src": "..." }
+    properties: Record<string, any>;
 }
 
 export interface ComponentProperty {
@@ -55,7 +65,7 @@ export interface ComponentDefinition {
     schema: ComponentProperty[];
 }
 
-// --- UPDATED UNION TYPE ---
+// --- UPDATED UNION TYPE (FrameElement is already included) ---
 export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameElement | PathElement | ImageElement | ComponentInstanceElement;
 
 // --- WORKSPACE STATE INTERFACE (for initial load) ---
@@ -66,26 +76,42 @@ export interface WorkspaceState {
 
 export type ActiveTool = 'select' | 'rectangle' | 'text' | 'frame' | 'ellipse' | 'pen';
 
+// NEW: A dedicated state slice for the presentation itself
+export interface PresentationState {
+    isActive: boolean;
+    currentSlideIndex: number;
+    presenterWindow: Window | null;
+}
+
+// MODIFIED: The main AppState now includes the presentation state
 export type AppState = {
 	elements: Record<string, CanvasElement>;
-    componentDefinitions: Record<string, ComponentDefinition>; // NEW: Registry for all components
+    componentDefinitions: Record<string, ComponentDefinition>;
 	selectedElementIds: string[];
 	groupEditingId: string | null;
 	activeTool: ActiveTool;
     editingElementId: string | null;
+    presentation: PresentationState; // <-- NEW
 };
 
+// MODIFIED: Added new actions for presentation mode
 export type Action =
-	| { type: 'SET_WORKSPACE_STATE'; payload: WorkspaceState } // Updated payload
+	| { type: 'SET_WORKSPACE_STATE'; payload: WorkspaceState }
 	| { type: 'ELEMENT_CREATED'; payload: CanvasElement }
 	| { type: 'ELEMENT_UPDATED'; payload: CanvasElement }
 	| { type: 'ELEMENTS_UPDATED'; payload: CanvasElement[] }
 	| { type: 'ELEMENT_DELETED'; payload: { id: string } }
-    | { type: 'COMPONENT_DEFINITION_CREATED'; payload: ComponentDefinition } // NEW
+    | { type: 'COMPONENT_DEFINITION_CREATED'; payload: ComponentDefinition }
 	| { type: 'SET_SELECTION'; payload: { ids: string[] } }
 	| { type: 'ADD_TO_SELECTION'; payload: { id: string } }
 	| { type: 'REMOVE_FROM_SELECTION'; payload: { id:string } }
 	| { type: 'ENTER_GROUP_EDITING'; payload: { groupId: string; elementId: string } }
 	| { type: 'EXIT_GROUP_EDITING' }
 	| { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
-    | { type: 'SET_EDITING_ELEMENT_ID'; payload: { id: string | null } };
+    | { type: 'SET_EDITING_ELEMENT_ID'; payload: { id: string | null } }
+    // --- NEW PRESENTATION ACTIONS ---
+    | { type: 'START_PRESENTATION'; payload: { presenterWindow: Window | null } }
+    | { type: 'STOP_PRESENTATION' }
+    | { type: 'NEXT_SLIDE' }
+    | { type: 'PREV_SLIDE' }
+    | { type: 'SET_SLIDE'; payload: { index: number } };

@@ -8,30 +8,31 @@ import { TextComponent } from './TextComponent';
 import { PathComponent } from './PathComponent';
 import { FrameComponent } from './FrameComponent';
 import ImageComponent from './ImageComponent';
-import { Group, Rect } from 'react-konva'; // NEW: Import Group and Rect for component rendering
+import { Group, Rect } from 'react-konva';
 import type {
     ShapeElement, TextElement, PathElement, FrameElement,
-    ImageElement, ComponentInstanceElement, CanvasElement // NEW: Import component types
+    ImageElement, ComponentInstanceElement, CanvasElement, ComponentDefinition
 } from '../../state/types';
 
-// ====================================================================================
-// NEW: Recursive Renderer for Component Children
-// This is a simplified renderer used only for drawing the elements INSIDE a component.
-// These inner elements are not individually interactive; they are part of the larger component.
-// ====================================================================================
-const RecursiveElementRenderer: React.FC<{ element: CanvasElement, instanceProps: Record<string, any> }> = ({ element, instanceProps }) => {
-    // --- Property Overriding Logic ---
-    // Check if this child element's properties are controlled by the parent instance.
-    // We create a copy of the element and override its properties if necessary.
-    const customizedElement = { ...element };
-    
-    // Example of overriding a text element's content. This can be expanded.
-    // Note: The backend schema ensures `target_property` and `prop_name` are linked.
-    if (customizedElement.element_type === 'text' && instanceProps[`${customizedElement.id}_content`]) {
-        customizedElement.content = instanceProps[`${customizedElement.id}_content`];
-    }
-    // Future overrides (e.g., for image `src` or shape `fill`) would go here.
 
+// ====================================================================================
+// Recursive Renderer for Component Children (No Changes Needed)
+// This component's logic is self-contained and correct.
+// ====================================================================================
+const RecursiveElementRenderer: React.FC<{
+    element: CanvasElement;
+    definition: ComponentDefinition;
+    instance: ComponentInstanceElement;
+}> = ({ element, definition, instance }) => {
+    const customizedElement = { ...element };
+    for (const prop of definition.schema) {
+        if (prop.target_element_id === element.id) {
+            const overrideValue = instance.properties[prop.prop_name];
+            if (overrideValue !== undefined) {
+                (customizedElement as any)[prop.target_property] = overrideValue;
+            }
+        }
+    }
     switch (customizedElement.element_type) {
         case 'shape':
             return <ShapeComponent element={customizedElement as ShapeElement} isVisible={true} />;
@@ -41,7 +42,6 @@ const RecursiveElementRenderer: React.FC<{ element: CanvasElement, instanceProps
             return <PathComponent element={customizedElement as PathElement} isVisible={true} />;
         case 'image':
             return <ImageComponent element={customizedElement as ImageElement} isVisible={true} />;
-        // Note: We don't render frames or groups recursively inside components for simplicity.
         default:
             return null;
     }
@@ -49,11 +49,16 @@ const RecursiveElementRenderer: React.FC<{ element: CanvasElement, instanceProps
 
 
 // ====================================================================================
-// Main Element Renderer
+// Main Element Renderer (MODIFIED)
 // ====================================================================================
+
+// --- NEW, FLEXIBLE PROP DEFINITION ---
+// The renderer can now accept EITHER an elementId OR a full element object.
+// This allows it to be used by both the main canvas and the isolated presentation view.
 interface ElementRendererProps {
-	elementId: string;
-	isVisible: boolean;
+	elementId?: string;
+    element?: CanvasElement; // <-- NEW optional prop
+	isVisible?: boolean;     // <-- Made optional
 	onDragStart?: (e: KonvaEventObject<DragEvent>) => void;
 	onDragMove?: (e: KonvaEventObject<DragEvent>) => void;
 	onDragEnd?: (e: KonvaEventObject<DragEvent>) => void;
@@ -62,10 +67,18 @@ interface ElementRendererProps {
 
 export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 	const { state } = useAppState();
-	const { elementId, isVisible, onDragStart, onDragMove, onDragEnd, onDblClick } = props;
-	const element = state.elements[elementId];
+	// --- MODIFIED LOGIC TO GET THE ELEMENT ---
+	const { elementId, isVisible = true, onDragStart, onDragMove, onDragEnd, onDblClick } = props;
+    
+    // 1. If an `element` object is passed directly, use it.
+    // 2. Otherwise, look it up in the global state using `elementId`.
+    const element = props.element ?? (elementId ? state.elements[elementId] : null);
 
-	if (!element) return null;
+	// If no element can be found, render nothing. This is a safe fallback.
+    if (!element) {
+        if (elementId) { console.warn(`ElementRenderer: Element with ID "${elementId}" not found.`); }
+        return null;
+    }
 
 	const commonProps = { onDragStart, onDragMove, onDragEnd, onDblClick, isVisible };
 	
@@ -79,12 +92,10 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
 		case 'image':
 			return <ImageComponent element={element as ImageElement} {...commonProps} />;
         
-        // --- NEW CASE FOR COMPONENT INSTANCE ---
         case 'component_instance': {
             const instance = element as ComponentInstanceElement;
             const definition = state.componentDefinitions[instance.definition_id];
 
-            // If the definition hasn't loaded yet, render nothing. This prevents crashes.
             if (!definition) {
                 console.warn(`Component definition ${instance.definition_id} not found for instance ${instance.id}`);
                 return null;
@@ -98,36 +109,33 @@ export const ElementRenderer: React.FC<ElementRendererProps> = (props) => {
                     width={instance.width}
                     height={instance.height}
                     rotation={instance.rotation}
-                    draggable // The whole group is draggable
+                    draggable
                     visible={isVisible}
                     onDragStart={onDragStart}
                     onDragMove={onDragMove}
                     onDragEnd={onDragEnd}
                     onDblClick={onDblClick}
                 >
-                    {/* Render each element from the component's template */}
                     {definition.template_elements.map(childElement => (
                         <RecursiveElementRenderer
                             key={childElement.id}
                             element={childElement}
-                            instanceProps={instance.properties}
+                            definition={definition}
+                            instance={instance}
                         />
                     ))}
-                    {/* The "Hitbox" Pattern: A transparent rectangle that covers the
-                        entire component. This ensures the component is easily and reliably
-                        selectable/draggable, even if it has empty spaces. It must be last. */}
-                    <Rect
-                        width={instance.width}
-                        height={instance.height}
-                        fill="transparent"
-                    />
+                    <Rect width={instance.width} height={instance.height} fill="transparent" />
                 </Group>
             );
         }
 
 		case 'frame':
+			// FrameComponent might also need to be checked, but for now we pass the full element.
+            // The FrameComponent itself doesn't need drag handlers, just the double-click.
 			return <FrameComponent element={element as FrameElement} onDblClick={onDblClick} />;
 		case 'group':
+			// Groups are logical containers and are not rendered directly by this component.
+            // The main canvas logic handles rendering their children recursively.
 			return null;
 		default:
             console.error(`Unknown element type: ${(element as any).element_type}`);

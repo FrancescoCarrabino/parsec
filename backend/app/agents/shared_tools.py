@@ -18,6 +18,24 @@ GET_CANVAS_ELEMENTS_TOOL = {
         "parameters": {"type": "object", "properties": {}},
     },
 }
+GET_ELEMENTS_BY_ID_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_elements_by_id",
+        "description": "Retrieves the full details for a specific list of element IDs. Use this when you have IDs and need to know more about those specific elements.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "description": "A list of the element IDs to retrieve.",
+                    "items": {"type": "string"},
+                }
+            },
+            "required": ["ids"],
+        },
+    },
+}
 
 UPDATE_ELEMENTS_TOOL = {
     "type": "function",
@@ -86,6 +104,17 @@ class CommonCanvasTools:
         """Implementation for the get_canvas_elements tool."""
         logger.info("Executing shared tool: 'get_canvas_elements'")
         return self.workspace.get_all_elements()
+        
+    def get_elements_by_id(self, ids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Implementation for the get_elements_by_id tool.
+        Returns a list of full element data for the given IDs.
+        """
+        logger.info(f"Executing shared tool: 'get_elements_by_id' for IDs: {ids}")
+        elements = [
+            self.workspace.elements.get(eid) for eid in ids if self.workspace.elements.get(eid)
+        ]
+        return [el.model_dump() for el in elements]
 
     def update_elements(self, updates: List[Dict]) -> Tuple[Dict[str, Any], List[str]]:
         """

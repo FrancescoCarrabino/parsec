@@ -58,8 +58,11 @@ class WebSocketClient {
 	// --- Direct User Action Commands ---
 	public sendPrompt(prompt: string, selectionContext: string[] | null) { this.sendMessage({ type: "user_prompt", payload: { text: prompt, selected_ids: selectionContext } }); }
 	public sendCreateElement(elementData: object) { this.sendMessage({ type: "create_element", payload: elementData }); }
-	public sendElementUpdate(updatePayload: { id: string, [key: string]: any }) { this.sendMessage({ type: "update_element", payload: updatePayload }); }
-	public sendDeleteElement(id: string) { this.sendMessage({ type: "delete_element", payload: { id } }); }
+	public sendElementUpdate(updatePayload: { id: string, [key: string]: any }, commitHistory: boolean = true) {
+        // We add the commitHistory flag to the payload. The backend defaults to True if it's missing.
+        const payloadWithHistory = { ...updatePayload, commitHistory };
+        this.sendMessage({ type: "update_element", payload: payloadWithHistory });
+    }	public sendDeleteElement(id: string) { this.sendMessage({ type: "delete_element", payload: { id } }); }
 	
 	// --- Grouping and Hierarchy Commands ---
 	public sendGroupElements(ids: string[]) { this.sendMessage({ type: "group_elements", payload: { ids } }); }
@@ -70,10 +73,35 @@ class WebSocketClient {
 	public sendReorderElement(id: string, command: string) { this.sendMessage({ type: "reorder_element", payload: { id, command } }); }
 	public sendReorderLayer(draggedId: string, targetId: string, position: 'above' | 'below') { this.sendMessage({ type: "reorder_layer", payload: { draggedId, targetId, position } }); }
 
-	// --- REMOVED METHODS ---
-	// The methods `sendUpdatePathPoint` and `sendMovePathPoints` have been removed.
-	// The new `usePathEditor` will use the robust `sendElementUpdate` command instead,
-	// which simplifies both frontend and backend logic.
+    public sendUpdatePresentationOrder(payload: { action: 'set', ordered_frame_ids: string[] } | { action: 'add', frame_id: string }) {
+        this.sendMessage({
+            type: "update_presentation_order",
+            payload: payload,
+        });
+    }
+    public sendReorderSlide(draggedId: string, targetId: string, position: 'above' | 'below') {
+        this.sendMessage({
+            type: "reorder_slide",
+            payload: {
+                dragged_id: draggedId,
+                target_id: targetId,
+                position: position,
+            },
+        });
+    }
+
+    public sendUndo() {
+        this.sendMessage({ type: "undo", payload: {} });
+    }
+
+    public sendRedo() {
+        this.sendMessage({ type: "redo", payload: {} });
+    }
+
+    // --- NEW: Batch Creation for Paste ---
+    public sendCreateElementsBatch(elements: object[]) {
+        this.sendMessage({ type: "create_elements_batch", payload: { elements } });
+    }
 }
 
 export const webSocketClient = new WebSocketClient();

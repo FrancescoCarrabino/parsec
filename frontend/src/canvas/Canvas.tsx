@@ -18,8 +18,7 @@ import { getElementSnapLines, getGuides } from '../utils/snapUtils';
 
 export const Canvas = () => {
   const { state, dispatch } = useAppState();
-  const { elements, selectedElementIds, groupEditingId, activeTool, editingElementId } = state;
-
+  const { elements, selectedElementIds, groupEditingId, activeTool, editingElementId, componentDefinitions } = state;
   const editingTextNode = editingElementId ? state.elements[editingElementId] : null;
   const editingText = (editingTextNode?.element_type === 'text') ? editingTextNode as TextElement : null;
   const editingPathNode = editingElementId ? state.elements[editingElementId] : null;
@@ -107,10 +106,17 @@ export const Canvas = () => {
       if (horizontalGuide) { finalPos.y += horizontalGuide.offset; }
       draggedNode.position(finalPos);
       setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
+      webSocketClient.sendElementUpdate(
+        { id: draggedNode.id(), x: finalPos.x, y: finalPos.y },
+        false // do not commit to history
+    );
   };
 
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-      webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+      webSocketClient.sendElementUpdate(
+        { id: e.target.id(), x: e.target.x(), y: e.target.y() },
+        true // commit this final state to history
+    );
       setGuides([]);
   };
 
@@ -256,13 +262,18 @@ export const Canvas = () => {
             const clipFunc = (element.element_type === 'frame' && element.clipsContent) ? (ctx: Konva.Context) => { ctx.rect(0, 0, element.width, element.height); } : undefined;
             return (
                 <KonvaGroup key={element.id} id={element.id} name={`${element.id} element`} x={element.x} y={element.y} rotation={element.rotation} draggable={isGroupDraggable} {...dragHandlers} clipFunc={clipFunc} onDblClick={handleDblClick}>
-                    <ElementRenderer elementId={element.id} isVisible={true} onDblClick={handleDblClick} onDragStart={() => {}} onDragMove={() => {}} onDragEnd={() => {}} />
+                    <ElementRenderer elementId={element.id} isVisible={true} onDblClick={handleDblClick} />
                     {renderElements(children)}
                 </KonvaGroup>
             );
         }
+        // Draggability for simple elements is handled by the ElementRenderer directly
+        // UNLESS we are in group editing mode, then only the group is draggable.
+        const isElementDraggable = (!element.parentId || groupEditingId === element.parentId) && activeTool === 'select';
+        const elementDragHandlers = isElementDraggable ? dragHandlers : {};
         const isVisible = editingElementId !== element.id;
-        return ( <ElementRenderer key={element.id} elementId={element.id} isVisible={isVisible} onDblClick={handleDblClick} {...dragHandlers} /> );
+
+        return ( <ElementRenderer key={element.id} elementId={element.id} isVisible={isVisible} onDblClick={handleDblClick} {...elementDragHandlers} /> );
     });
   };
 
@@ -301,8 +312,62 @@ export const Canvas = () => {
     setTimeout(() => { actionInProgress.current = false; }, 50);
   };
 
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); // This is necessary to allow a drop event.
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    // Retrieve the data we stored in the drag event
+    const dragDataString = e.dataTransfer.getData('text/plain');
+    if (!dragDataString) return;
+
+    let dragData;
+    try {
+      dragData = JSON.parse(dragDataString);
+    } catch (err) {
+      console.error("Failed to parse drag data:", err);
+      return;
+    }
+
+    const { definitionId, offsetX, offsetY } = dragData;
+    const definition: ComponentDefinition | undefined = componentDefinitions[definitionId];
+
+    if (!definition) {
+      console.error(`Dropped component with unknown definition ID: ${definitionId}`);
+      return;
+    }
+
+    // Calculate drop position relative to the canvas, accounting for pan and zoom
+    const dropPosition = stage.getPointerPosition();
+    if (!dropPosition) return;
+    
+    // The drop position is in world coordinates. We must adjust for the offset
+    // of the cursor *within* the dragged item to place it correctly.
+    const finalX = dropPosition.x - (offsetX * definition.template_elements[0]?.width || 0) / stageScale;
+    const finalY = dropPosition.y - (offsetY * definition.template_elements[0]?.height || 0) / stageScale;
+
+    // Create the payload for the new component instance
+    const newInstancePayload = {
+      element_type: 'component_instance',
+      definition_id: definition.id,
+      x: finalX,
+      y: finalY,
+      width: definition.template_elements.reduce((max, el) => Math.max(max, el.x + el.width), 0),
+      height: definition.template_elements.reduce((max, el) => Math.max(max, el.y + el.height), 0),
+      // The backend will populate the default properties
+    };
+
+    webSocketClient.sendCreateElement(newInstancePayload);
+  };
+
+
   return (
-    <div style={canvasContainerStyle}>
+    // Add the new handlers to the main container div
+    <div style={canvasContainerStyle} onDragOver={handleDragOver} onDrop={handleDrop}>
       <Stage ref={stageRef} onDblClick={handleDblClick} onClick={handleClick} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={handleWheel} width={window.innerWidth - 520} height={window.innerHeight} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} draggable={isPanning}>
         <Layer>
             {renderElements(topLevelElements)}
