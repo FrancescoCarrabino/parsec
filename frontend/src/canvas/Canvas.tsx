@@ -38,7 +38,7 @@ export const Canvas = () => {
   const drawingTool = useDrawingTool(forceUpdate);
   const penTool = usePenTool(forceUpdate);
 
-  const marqueeTool = useMarqueeSelect(activeTool, isPanning);
+  const marqueeTool = useMarqueeSelect(activeTool, isPanning, stageScale);
   const pathEditor = usePathEditor(editingPath, stageScale);
 
   const gridStyles = getGridStyles(stageScale, stagePos);
@@ -280,35 +280,51 @@ export const Canvas = () => {
   const topLevelElements = Object.values(elements).filter(el => !el.parentId).sort((a, b) => a.zIndex - b.zIndex);
   
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
-    actionInProgress.current = true;
-    if (isDrawing) {
+    // If we are using the pen tool, it has its own drawing logic.
+    if (penTool.isDrawing) {
         penTool.onMouseDown(e);
         return;
     }
-    if (activeTool === 'select') {
-        if (e.target === e.target.getStage()) {
-            marqueeTool.onMouseDown(e);
+
+    // Handle marquee selection
+    if (activeTool === 'select' && e.target === e.target.getStage()) {
+        const consumed = marqueeTool.onMouseDown(e);
+        // If the marquee tool started a selection, we're done.
+        if (consumed) {
+             actionInProgress.current = true; // Set the action flag HERE
+             return;
         }
-        return;
     }
-    // For all other creation tools
-    drawingTool.onMouseDown(e);
-    penTool.onMouseDown(e);
+    
+    // Handle creation tools (rectangle, ellipse)
+    // The pen tool is handled separately above.
+    if (activeTool !== 'select' && activeTool !== 'pen') {
+        const consumed = drawingTool.onMouseDown(e);
+        if (consumed) {
+            actionInProgress.current = true; // Set the action flag HERE
+        }
+    }
   };
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    // This handler is correct and does not need changes.
     drawingTool.onMouseMove(e);
     penTool.onMouseMove(e);
     marqueeTool.onMouseMove(e);
   };
 
   const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
-    if (drawingTool.isDrawing) {
-        drawingTool.onMouseUp();
-    }
+    // Check marquee tool first
     if (marqueeTool.isSelecting) {
         marqueeTool.onMouseUp(e);
+    } 
+    // Then check drawing tools
+    else if (drawingTool.isDrawing) {
+        drawingTool.onMouseUp();
     }
+    // Pen tool handles its own completion, so no changes needed here.
+
+    // Use a timeout to reset the flag, preventing click events from firing immediately.
     setTimeout(() => { actionInProgress.current = false; }, 50);
   };
 

@@ -2,16 +2,19 @@
 import json
 import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from typing import List
+from typing import List, Dict
 from loguru import logger
 
 from ...services.workspace_service import WorkspaceService
+from ...agents.base_agent import BaseAgent
+from ...agents.content_strategist import ContentStrategist
 from ...agents.main_agent import MainAgent
 from ...agents.canvas_agent import CanvasAgent
 from ...agents.image_genius import ImageGenius
 from ...agents.layout_maestro import LayoutMaestro
 from ...agents.component_crafter import ComponentCrafter
 from ...agents.shared_tools import CommonCanvasTools
+from ...agents.visual_designer import VisualDesigner
 
 router = APIRouter()
 
@@ -33,18 +36,28 @@ manager = ConnectionManager()
 # --- Dependency Injection Setup (This is correct) ---
 _workspace_service = WorkspaceService()
 _common_tools = CommonCanvasTools(workspace_service=_workspace_service)
-_canvas_agent = CanvasAgent(workspace_service=_workspace_service, common_tools=_common_tools)
-_image_genius = ImageGenius(workspace_service=_workspace_service)
-_layout_maestro = LayoutMaestro(common_tools=_common_tools)
-_component_crafter = ComponentCrafter(workspace_service=_workspace_service, common_tools=_common_tools)
-_main_agent = MainAgent(
-    canvas_agent=_canvas_agent,
-    image_agent=_image_genius,
-    layout_agent=_layout_maestro,
-    component_agent=_component_crafter,
-)
 
-def get_main_agent() -> MainAgent: return _main_agent
+# Create a dictionary to hold all agents
+agent_pouch: Dict[str, BaseAgent] = {}
+common_args = {"common_tools": _common_tools}
+
+# Instantiate each specialist
+agent_pouch["ContentStrategist"] = ContentStrategist(**common_args)
+agent_pouch["VisualDesigner"] = VisualDesigner(**common_args)
+agent_pouch["LayoutMaestro"] = LayoutMaestro(**common_args)
+agent_pouch["CanvasAgent"] = CanvasAgent(**common_args)
+agent_pouch["ImageGenius"] = ImageGenius(workspace_service=_workspace_service, **common_args)
+agent_pouch["ComponentCrafter"] = ComponentCrafter(workspace_service=_workspace_service, **common_args)
+# Add MainAgent last
+agent_pouch["MainAgent"] = MainAgent(**common_args)
+
+# Give every agent a reference to all its peers
+for agent in agent_pouch.values():
+    agent.set_agent_pouch(agent_pouch)
+
+def get_main_agent() -> MainAgent:
+    return agent_pouch["MainAgent"]
+
 def get_workspace_service() -> WorkspaceService: return _workspace_service
 
 
