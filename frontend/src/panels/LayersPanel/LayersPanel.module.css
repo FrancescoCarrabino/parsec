@@ -1,0 +1,202 @@
+/* src/panels/LayersPanel/LayersPanel.module.css */
+
+.panel {
+    width: 260px;
+    flex: 1 1 auto;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+  }
+  
+  .header {
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: var(--space-4) var(--space-4) var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  
+  /* --- Updated Present Button Styling --- */
+  .presentButton {
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1); /* 4px */
+    cursor: pointer;
+    transition: var(--transition-fast);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap; /* Prevent text wrapping */
+  }
+  
+  .presentButton:hover {
+    background: var(--accent-primary-hover);
+  }
+  
+  .presentButton:disabled {
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+  }
+  
+  .presentButtonIcon {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .scrollableArea {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0 var(--space-2);
+  }
+  
+  .sectionTitle {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 600;
+    padding: var(--space-4) var(--space-4) var(--space-2) var(--space-4);
+  }
+  
+  /* --- Updated Layer Item Specific Styles --- */
+  .layerItem {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    margin: var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    transition: var(--transition-fast);
+    border: 1px solid transparent;
+  }
+  
+  .layerItem:hover {
+    background: var(--bg-element-hover);
+    border-color: var(--border-interactive);
+  }
+  
+  .layerItem.dragging {
+    opacity: 0.4;
+  }
+  .layerItem.isOverAbove {
+    border-top: 2px solid var(--accent-primary);
+  }
+  .layerItem.isOverBelow {
+    border-bottom: 2px solid var(--accent-primary);
+  }
+  .layerItem.isOverOn {
+    background: rgba(0, 122, 255, 0.2);
+  }
+  .layerItem.isSelected {
+    background: rgba(0, 122, 255, 0.4);
+  }
+  
+  .layerIconContainer {
+    opacity: 0.8;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0; /* Prevent icon from shrinking */
+  }
+  
+  .layerName {
+    flex-grow: 1; /* Allow name to take available space */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .slideNumberBadge {
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+    border-radius: var(--radius-sm);
+    padding: 1px var(--space-1);
+    min-width: 16px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  
+  /* --- Updated Slide Item Specific Styles --- */
+  .slideItem {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    margin: var(--space-1) 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    transition: var(--transition-fast);
+    border: 1px solid transparent;
+  }
+  
+  .slideItem:hover {
+    background: var(--bg-element-hover);
+    border-color: var(--border-interactive);
+  }
+  .slideItem.dragging {
+    opacity: 0.4;
+  }
+  .slideItem.isOverAbove {
+    border-top: 2px solid var(--accent-primary);
+  }
+  .slideItem.isOverBelow {
+    border-bottom: 2px solid var(--accent-primary);
+  }
+  .slideItem.isSelected {
+    background: rgba(0, 122, 255, 0.4);
+  }
+  
+  .slideNumber {
+    color: var(--text-secondary);
+    min-width: 20px;
+    text-align: right;
+    font-size: 12px;
+  }
+  
+  .slidePreview {
+    width: 32px;
+    height: 24px;
+    background: var(--bg-element);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0; /* Prevent preview from shrinking */
+  }
+  
+  /* --- Updated Drop Zone Styles --- */
+  .slidesDropZone {
+    flex-grow: 1;
+    min-height: 60px;
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: 2px dashed transparent;
+    transition: var(--transition-fast);
+  }
+  
+  .slidesDropZone.isOver {
+    background: rgba(0, 122, 255, 0.1);
+    border-color: var(--accent-primary);
+  }
+  
+  .noSlidesMessage {
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: var(--space-3);
+    text-align: center;
+  }

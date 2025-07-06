@@ -1,39 +1,52 @@
 // src/panels/PropertiesPanel/common/CommonControls.tsx
 import React from 'react';
+import styles from '../PropertiesPanel.module.css'; // Import the shared module
+import clsx from 'clsx'; // For conditional classes
+
+// Re-export PropertyGroup (defined in PropertyGroup.tsx) so other files can import from here
+export { PropertyGroup } from './PropertyGroup';
 
 export const PropertyRow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', alignItems: 'center', marginBottom: '6px' }}>
+    <div className={styles.propertyRow}>
         {children}
     </div>
 );
 
 export const PropertyLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label style={{ color: '#ccc', fontSize: '12px' }}>{children}</label>
+    <label className={styles.propertyLabel}>{children}</label>
 );
 
 export const StringInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
-    <input {...props} style={{
-        width: '100%',
-        background: '#1e1e1e',
-        color: '#ccc',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        padding: '6px',
-        boxSizing: 'border-box',
-        fontSize: '12px'
-    }} />
+    <input {...props} className={styles.stringInput} />
 );
 
-export const ActionButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = (props) => (
-    <button {...props} style={{
-        background: '#3f3f46',
-        border: '1px solid #555',
-        color: '#ccc',
-        padding: '8px',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        width: '100%',
-        textAlign: 'center',
-        ...props.style,
-    }} />
+export const ColorInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
+  <div className={styles.colorInputWrapper}>
+    {/* Read-only text input to display hex value */}
+    <input type="text" value={props.value} readOnly className={styles.colorInputText} />
+    {/* The actual color picker */}
+    <input {...props} type="color" className={styles.colorPicker} />
+  </div>
 );
+
+export const SelectInput: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = (props) => (
+    <select {...props} className={styles.selectInput}>
+        {props.children}
+    </select>
+);
+
+
+export const ActionButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = (props) => {
+    // Determine if the button is disabled to apply appropriate styles
+    const isDisabled = props.disabled;
+    const buttonClasses = clsx(styles.actionButton, {
+        [styles.disabledActionButton]: isDisabled,
+    });
+
+    return (
+        // Spread props including onClick, disabled, etc.
+        <button {...props} className={buttonClasses}>
+            {props.children}
+        </button>
+    );
+};

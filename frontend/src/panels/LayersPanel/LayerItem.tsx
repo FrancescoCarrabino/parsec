@@ -1,34 +1,63 @@
-// src/panels/LayersPanel/LayerItem.tsx
-import React, { useRef } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react'; // Added useState and useEffect
 import { useDrag, useDrop } from 'react-dnd';
 import { useAppState } from '../../state/AppStateContext';
 import { webSocketClient } from '../../api/websocket_client';
 import type { CanvasElement, FrameElement } from '../../state/types';
 import { ItemTypes } from './constants';
+import styles from './LayersPanel.module.css';
+import clsx from 'clsx';
+
+// Import Lucide Icons
+import {
+    MousePointer, Type, Square, Circle, PenTool, Brackets, FileText, Image,
+    MoreHorizontal // Placeholder for generic path icon
+} from 'lucide-react';
 
 interface LayerItemProps {
     element: CanvasElement;
     depth: number;
 }
 
+// Helper to map element types to Lucide icons
+const ElementIconMap: Record<CanvasElement['element_type'], React.ElementType> = {
+    text: Type,
+    rectangle: Square,
+    ellipse: Circle,
+    path: MoreHorizontal, // Or use PenTool if you prefer
+    image: Image,
+    frame: Brackets, // Representing a container/frame
+    group: Brackets, // Group can also use Brackets or a Folder icon
+    component_instance: Brackets, // Component instance might use Brackets or a specific component icon
+    // Add other types if they exist
+};
+
 export const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
     const ref = useRef<HTMLDivElement>(null);
     const { state, dispatch } = useAppState();
+    
+    const [indentationWidth, setIndentationWidth] = useState<number>(16); // Default value
 
-    const isSlide = element.element_type === 'frame' && element.presentationOrder !== null;
+    useEffect(() => {
+        const computedStyle = getComputedStyle(document.documentElement);
+        const space4 = computedStyle.getPropertyValue('--space-4').trim();
+        setIndentationWidth(parseInt(space4 || '16', 10));
+    }, []);
+
+    const isSlide = element.element_type === 'frame' && (element as FrameElement).presentationOrder !== null;
 
     const [{ isDragging }, drag] = useDrag(() => ({
-        // We only have one item type now. It's just a layer.
         type: ItemTypes.LAYER,
         item: {
             id: element.id,
             parentId: element.parentId,
             isSlide: isSlide,
+            elementType: element.element_type,
+            presentationOrder: isSlide ? (element as FrameElement).presentationOrder : null,
         },
         collect: (monitor) => ({ isDragging: !!monitor.isDragging() })
     }));
 
-    const [{ isOver, dropPosition }, drop] = useDrop<{ id: string, parentId: string | null, isSlide: boolean }, void, { isOver: boolean, dropPosition: 'above' | 'below' | 'on' | null }>({
+    const [{ isOver, dropPosition }, drop] = useDrop<{ id: string, parentId: string | null, isSlide: boolean, elementType: string, presentationOrder: number | null }, void, { isOver: boolean, dropPosition: 'above' | 'below' | 'on' | null }>({
         accept: ItemTypes.LAYER,
         hover(item, monitor) {
             if (!ref.current || item.id === element.id) return;
@@ -39,41 +68,41 @@ export const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
             const hoverClientY = clientOffset.y - hoverBoundingRect.top;
 
             const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
-            const isContainer = element.element_type === 'frame' || element.element_type === 'group';
+            const isTargetContainer = element.element_type === 'frame' || element.element_type === 'group';
 
-            // If the target is a slide, we can only drop above or below to reorder.
-            if (isSlide) {
-                (monitor.getItem() as any).dropPosition = hoverClientY < hoverMiddleY ? 'above' : 'below';
-            } 
-            // If the target is a regular container, we can reparent.
-            else if (isContainer && item.parentId !== element.id && hoverClientY > hoverBoundingRect.height * 0.25 && hoverClientY < hoverBoundingRect.height * 0.75) {
-                (monitor.getItem() as any).dropPosition = 'on';
-            } 
-            // Otherwise, we are reordering z-index.
-            else {
-                (monitor.getItem() as any).dropPosition = hoverClientY < hoverMiddleY ? 'above' : 'below';
+            let calculatedDropPosition: 'above' | 'below' | 'on' | null = null;
+
+            if (item.isSlide) { // Source item is a slide
+                calculatedDropPosition = hoverClientY < hoverMiddleY ? 'above' : 'below';
+            } else if (isTargetContainer && item.elementType !== 'frame' && item.presentationOrder === null) { // Target is container, source is not a slide
+                if (hoverClientY > hoverBoundingRect.height * 0.25 && hoverClientY < hoverBoundingRect.height * 0.75) {
+                    calculatedDropPosition = 'on';
+                } else {
+                    calculatedDropPosition = hoverClientY < hoverMiddleY ? 'above' : 'below';
+                }
+            } else if (!item.isSlide && !isSlide) { // Both are regular layers, reorder
+                calculatedDropPosition = hoverClientY < hoverMiddleY ? 'above' : 'below';
             }
+            
+            (monitor.getItem() as any).dropPosition = calculatedDropPosition;
         },
         drop: (item, monitor) => {
             const position = (monitor.getItem() as any).dropPosition;
 
-            // CASE 1: Reordering slides.
-            if (item.isSlide && isSlide) {
-                webSocketClient.sendReorderSlide(item.id, element.id, position);
-            }
-            // CASE 2: Reparenting into a group or frame.
-            else if (position === 'on') {
+            if (position === 'on') {
                 webSocketClient.sendReparentElement(item.id, element.id);
-            }
-            // CASE 3: Reordering z-index of regular layers.
-            else if (item.parentId === element.parentId) {
-                webSocketClient.sendReorderLayer(item.id, element.id, position);
+            } else if (position === 'above' || position === 'below') {
+                if (item.parentId === element.parentId && !item.isSlide) {
+                     webSocketClient.sendReorderLayer(item.id, element.id, position);
+                } else if (item.isSlide && isSlide) {
+                    // Reordering slides handled by SlideItem
+                }
             }
         },
-        canDrop: (item, monitor) => {
-            // A slide can only be dropped on another slide.
-            if (item.isSlide) return isSlide;
-            // A regular layer can be dropped anywhere.
+        canDrop: (item) => {
+            if (item.isSlide) {
+                return isSlide || (element.element_type === 'frame' || element.element_type === 'group');
+            }
             return true;
         },
         collect: (monitor) => ({
@@ -85,28 +114,41 @@ export const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
     drag(drop(ref));
 
     const isSelected = state.selectedElementIds.includes(element.id);
-    const handleSelect = (e: React.MouseEvent) => { e.stopPropagation(); dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } }); };
+    const handleSelect = (e: React.MouseEvent) => { 
+        e.stopPropagation(); 
+        dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } }); 
+    };
     
-    // UI Feedback
-    const borderTop = isOver && dropPosition === 'above' ? '2px solid #00aaff' : '1px solid transparent';
-    const borderBottom = isOver && dropPosition === 'below' ? '2px solid #00aaff' : '1px solid transparent';
-    const backgroundColor = isOver && dropPosition === 'on' ? 'rgba(0, 255, 122, 0.2)' : isSelected ? 'rgba(0, 122, 255, 0.4)' : 'transparent';
+    const layerClasses = clsx(styles.layerItem, {
+        [styles.dragging]: isDragging,
+        [styles.isSelected]: isSelected,
+        [styles.isOverAbove]: isOver && dropPosition === 'above',
+        [styles.isOverBelow]: isOver && dropPosition === 'below',
+        [styles.isOverOn]: isOver && dropPosition === 'on',
+    });
+
+    const dynamicItemStyles: React.CSSProperties = {
+        marginLeft: `${depth * indentationWidth}px`,
+        borderTop: (isOver && dropPosition === 'above') ? `2px solid ${state.theme?.accentPrimary || '#00aaff'}` : '2px solid transparent',
+        borderBottom: (isOver && dropPosition === 'below') ? `2px solid ${state.theme?.accentPrimary || '#00aaff'}` : '2px solid transparent',
+    };
     
-    const itemContentStyle: React.CSSProperties = { padding: '4px 8px', marginLeft: `${depth * 20}px`, borderRadius: '4px', cursor: 'pointer', backgroundColor, opacity: isDragging ? 0.4 : 1, display: 'flex', alignItems: 'center', gap: '8px', borderTop, borderBottom, marginTop: '1px', marginBottom: '1px', borderLeft: '1px solid transparent', borderRight: '1px solid transparent' };
-    const Icon = () => <span style={{ opacity: 0.8 }}>{element.element_type === 'frame' ? '🖼️' : element.element_type === 'group' ? '📁' : element.element_type === 'text' ? 'T' : '📄'}</span>;
+    // Dynamically get the icon component based on element type
+    const IconComponent = ElementIconMap[element.element_type] || FileText; // Fallback to FileText
 
     const presentationOrder = (element as FrameElement).presentationOrder;
 
     return (
-        <div ref={ref} style={itemContentStyle} onMouseDown={handleSelect}>
-            {/* NEW: Slide number badge */}
+        <div ref={ref} className={layerClasses} style={dynamicItemStyles} onMouseDown={handleSelect}>
             {isSlide && (
-                <span style={{ fontSize: '10px', background: '#007aff', color: 'white', borderRadius: '4px', padding: '1px 4px', minWidth: '12px', textAlign: 'center' }}>
+                <span className={styles.slideNumberBadge}>
                     {presentationOrder! + 1}
                 </span>
             )}
-            <Icon />
-            <span>{element.name || element.id.substring(0, 8)}</span>
+            <div className={styles.layerIconContainer}>
+                <IconComponent size={18} /> {/* Use Lucide component */}
+            </div>
+            <span className={styles.layerName}>{element.name || element.id.substring(0, 8)}</span>
         </div>
     );
 };

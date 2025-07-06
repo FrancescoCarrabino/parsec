@@ -1,0 +1,36 @@
+/* src/canvas/TextEditorOverlay.module.css */
+
+.overlayContainer {
+    position: absolute;
+    transform-origin: top left;
+    z-index: 1000; /* Ensure it's above everything */
+  }
+  
+  .textarea {
+    box-sizing: border-box;
+    
+    background: var(--bg-surface); /* Keep surface background for consistency */
+    color: var(--text-primary); /* This should be controlled by the element's fontColor */
+    
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    
+    border: 1px solid var(--accent-primary); 
+    border-radius: var(--radius-sm);
+    
+    padding: 0; /* Padding is usually handled by Konva, or we'll apply it dynamically */
+    margin: 0;
+    
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    
+    text-align: inherit;
+    
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+  }
+  
+  .textarea::placeholder {
+    color: var(--text-secondary);
+  }

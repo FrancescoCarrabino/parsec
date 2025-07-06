@@ -19,11 +19,11 @@ export interface TextElement extends BaseElement {
     fontFamily: string;
     fontSize: number;
     fontWeight: number;
-    fontColor: string;
-    letterSpacing: number;
-    lineHeight: number;
-    align: 'left' | 'center' | 'right';
-    verticalAlign: 'top' | 'middle' | 'bottom';
+    fontColor: string; // <-- Default should be here
+    letterSpacing: number; // <-- Default should be here
+    lineHeight: number; // <-- Default should be here
+    align: 'left' | 'center' | 'right'; // <-- Default should be here
+    verticalAlign: 'top' | 'middle' | 'bottom'; // <-- Default should be here
 }
 
 // MODIFIED: FrameElement now includes presentation-specific properties

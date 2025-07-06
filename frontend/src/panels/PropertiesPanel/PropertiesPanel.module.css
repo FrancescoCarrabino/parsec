@@ -1,0 +1,336 @@
+/* src/panels/PropertiesPanel/PropertiesPanel.module.css */
+
+/* --- Base Panel Styles --- */
+.panel {
+    width: 280px;
+    height: 100%;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    border-left: 1px solid var(--border-subtle);
+    overflow-y: auto;
+    padding: var(--space-4);
+    box-sizing: border-box;
+  }
+  
+  /* --- Panel Title Style --- */
+  .title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  
+  /* --- Property Group Styling --- */
+  .propertyGroup {
+    margin-bottom: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--space-4);
+  }
+  
+  /* Style for the title line of a property group (clickable area) */
+  .propertyGroupTitle {
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-2); /* Space below the title (initial, overridden by content gap) */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  /* Style for the dropdown indicator icon (Chevron) */
+  .propertyGroupTitle svg {
+      width: 12px;
+      height: 12px;
+      stroke: var(--text-secondary);
+  }
+  
+  
+  /* --- Property Group Content Layout --- */
+  /* This container wraps the actual controls (labels, inputs, etc.) */
+  /* It uses a grid to align labels and controls into two columns */
+  .propertyGroupContent {
+      display: grid;
+      /* Define columns: Label (fixed/min width) | Control (takes rest of space) */
+      grid-template-columns: minmax(80px, 100px) 1fr;
+      /* Define gap between rows and columns */
+      gap: var(--space-2) var(--space-3); /* 8px vertical gap, 12px horizontal gap */
+      align-items: center; /* Vertically center items in their row */
+      margin-top: var(--space-2); /* Space below the group title */
+  }
+  
+  /* --- Styling for items directly within the PropertyGroupContent grid --- */
+  /* These rules apply to components like PropertyRow, ActionButton, textarea */
+  
+  /* Property Rows placed directly within the grid */
+  .propertyGroupContent > .propertyRow {
+      /* 'contents' makes the children of .propertyRow participate directly in the parent grid */
+      display: contents;
+      /* No margins or gaps needed here, parent grid handles it */
+  }
+  
+  /* Full-width Action Buttons placed directly within the grid */
+  .propertyGroupContent > .actionButton {
+      grid-column: 1 / span 2; /* Make the button span both columns */
+      /* Ensure button takes full width within its spanned grid cell */
+      width: 100%;
+  }
+  
+  /* Textarea placed directly within the grid (like Speaker Notes) */
+  .propertyGroupContent > .speakerNotesTextarea {
+      grid-column: 1 / span 2; /* Make the textarea span both columns */
+      /* Ensure textarea takes full width within its spanned grid cell */
+      width: 100%;
+  }
+  
+  
+  /* --- Styling for elements *inside* a PropertyRow *within* the grid --- */
+  /* These define how the label and control behave within their grid cell */
+  
+  /* Property Labels within a PropertyRow inside the grid */
+  .propertyGroupContent > .propertyRow > .propertyLabel {
+      grid-column: 1; /* Place label in the first column */
+      /* Label styles are inherited, but reset min-width if needed */
+      min-width: auto; /* Reset min-width from the general .propertyLabel style */
+      text-align: left; /* Ensure label text aligns left */
+      padding-right: 0; /* Ensure no extra padding pushing content */
+  }
+  
+  /* Controls (inputs, selects, color picker wrapper, button groups) within a PropertyRow inside the grid */
+  .propertyGroupContent > .propertyRow > .stringInput,
+  .propertyGroupContent > .propertyRow > .selectInput,
+  .propertyGroupContent > .propertyRow > .colorInputWrapper,
+  .propertyGroupContent > .propertyRow > .alignButtonGroup {
+      grid-column: 2; /* Place control in the second column */
+      /* Ensure these controls take up their grid column space */
+      width: auto; /* Allow control to take grid column width (overrides width: 100% etc if applied there) */
+      justify-self: stretch; /* Make the control stretch to fill the grid cell horizontally */
+      flex: none; /* Explicitly disable flex behavior for grid item */
+  }
+  
+  
+  /* --- Input Controls Styling (StringInput, ColorInput, SelectInput) --- */
+  /* Styles for the appearance of the input fields themselves */
+  /* Keep .stringInput, .colorInputWrapper, .colorInputText, .colorPicker, .selectInput as before */
+  .stringInput {
+    flex: 1;
+    background: var(--bg-element);
+    border: 1px solid var(--border-interactive);
+    color: var(--text-primary);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    text-align: right;
+    font-family: inherit;
+    font-size: 13px;
+    min-width: 0;
+    transition: var(--transition-fast);
+  }
+  
+  .stringInput:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+  }
+  
+  .colorInputWrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-grow: 1;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+  
+  .colorInputText {
+    width: 70px;
+    font-size: 12px;
+    text-align: right;
+    background: var(--bg-element);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+  
+  .colorPicker {
+    background: transparent;
+    border: none;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  
+  .selectInput {
+    flex: 1;
+    background: var(--bg-element);
+    border: 1px solid var(--border-interactive);
+    color: var(--text-primary);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="%23A0A0A5" stroke-width="2"><path d="M8 11L4 7M12 7L8 11L4 7Z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right var(--space-3) top 50%;
+    background-size: 16px;
+    min-width: 0;
+  }
+  
+  
+  /* --- Action Buttons Styling --- */
+  /* Base style for all action buttons */
+  .actionButton {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    text-align: center;
+    width: 100%; /* Default width */
+    background: var(--bg-element);
+    border: 1px solid var(--border-interactive);
+    color: var(--text-primary);
+    gap: var(--space-1); /* Space between icon and text */
+  }
+  .actionButton:hover {
+    background: var(--bg-element-hover);
+    border-color: var(--border-interactive);
+  }
+  
+  /* Style for disabled action buttons */
+  .disabledActionButton {
+    composes: actionButton;
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  
+  /* --- Specific Button Styles (composed from actionButton) --- */
+  
+  /* Fill / Stroke Toggle Buttons */
+  .removeFillButton, .addFillButton, .removeStrokeButton, .addStrokeButton {
+     composes: actionButton;
+     margin-bottom: var(--space-2); /* Add margin below toggle buttons when not in grid */
+  }
+  .addFillButton, .addStrokeButton {
+     background: var(--accent-primary);
+     color: var(--text-on-accent);
+     border-color: var(--accent-primary);
+  }
+  .addFillButton:hover, .addStrokeButton:hover {
+     background: var(--accent-primary-hover);
+     border-color: var(--accent-primary-hover);
+  }
+  
+  
+  /* --- Text Properties Section Specific Styles --- */
+  
+  /* Container for the Horizontal Alignment Button Group */
+  .alignButtonGroup {
+    display: flex;
+    flex: 1; /* Take remaining space in the PropertyRow */
+    min-width: 0;
+  }
+  
+  /* Base style for individual Alignment buttons */
+  .alignButton {
+    flex: 1;
+    background: var(--bg-element);
+    border: 1px solid var(--border-interactive);
+    color: var(--text-secondary);
+    padding: var(--space-2) 0;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .alignButton:not(:last-child) {
+    margin-right: -1px;
+  }
+  .alignButton:first-child { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
+  .alignButton:last-child { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
+  
+  /* Style for the active Alignment button */
+  .alignButton.active {
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+    border-color: var(--accent-primary);
+    z-index: 1;
+  }
+  /* Icon size within Alignment buttons */
+  .alignButton svg {
+      width: 18px;
+      height: 18px;
+  }
+  
+  
+  /* --- Speaker Notes Textarea --- */
+  .speakerNotesTextarea {
+    width: 100%;
+    box-sizing: border-box;
+    height: 120px;
+    background: var(--bg-element);
+    color: var(--text-primary);
+    border: 1px solid var(--border-interactive);
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    transition: var(--transition-fast);
+  }
+  .speakerNotesTextarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+  }
+  
+  
+  /* --- Grid Layouts for Button Groups (e.g., Arrange/Order) --- */
+  /* Container that uses a grid specifically for laying out action buttons */
+  .actionGrid {
+    display: grid;
+    /* Two columns, each taking equal space */
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2); /* 8px gap between buttons */
+  }
+  
+  /* Style buttons *directly* inside the actionGrid */
+  /* They compose from actionButton but override width */
+  .actionGrid button {
+    width: auto; /* Override the default 100% width */
+    /* Gap, display, align-items, justify-content, gap were moved to base .actionButton */
+  }
+  /* Icon size within action grid buttons */
+  .actionGrid button svg {
+      width: 18px;
+      height: 18px;
+      /* Gap handles spacing, no need for margin */
+  }
+  
+  
+  /* No Selection Message */
+  .noSelectionMessage {
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: var(--space-8);
+  }

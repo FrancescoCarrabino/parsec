@@ -1,30 +1,20 @@
-// src/panels/LayersPanel/index.tsx
 import React, { useMemo } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { useAppState } from '../../state/AppStateContext';
 import { LayerItem } from './LayerItem';
-import { PresentationIcon } from '../../icons/PresentationIcon';
-import type { FrameElement } from '../../state/types';
+// Import PresentationIcon properly and ensure it's styled
+import { Presentation as PresentationIcon } from 'lucide-react'; // Assuming you've installed lucide-react
+import type { CanvasElement, FrameElement } from '../../state/types';
 
-// STYLES (Unchanged)
-const panelStyle: React.CSSProperties = { width: '260px', flex: '1 1 100%', background: '#252627', color: '#ccc', padding: '0', boxSizing: 'border-box', fontFamily: 'sans-serif', fontSize: '13px', borderRight: '1px solid #444', overflowY: 'hidden', display: 'flex', flexDirection: 'column' };
-const headerStyle: React.CSSProperties = { color: 'white', fontWeight: 'bold', padding: '16px 16px 8px 16px', borderBottom: '1px solid #444', fontSize: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 };
-const sectionTitleStyle: React.CSSProperties = { color: '#888', textTransform: 'uppercase', fontSize: '11px', fontWeight: 'bold', padding: '16px 16px 8px 16px' };
-const scrollableAreaStyle: React.CSSProperties = { flexGrow: 1, overflowY: 'auto', padding: '0 8px' };
-const presentButtonStyle: React.CSSProperties = { background: '#007aff', color: 'white', border: 'none', borderRadius: '5px', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' };
-const presentButtonDisabledStyle: React.CSSProperties = { ...presentButtonStyle, background: '#444', cursor: 'not-allowed' };
-
+import styles from './LayersPanel.module.css'; // Import the CSS Module
 
 const LayersPanelComponent: React.FC = () => {
     const { state, dispatch } = useAppState();
     const { elements } = state;
 
-    // This memo now just gets ALL elements, no more splitting.
     const sortedElements = useMemo(() => {
         const allElements = Object.values(elements);
-        // Sort slides by their order, then everything else by z-index.
-        // This naturally groups slides at the top if they have a low z-index.
         return allElements.sort((a, b) => {
             const aIsSlide = a.element_type === 'frame' && (a as FrameElement).presentationOrder !== null;
             const bIsSlide = b.element_type === 'frame' && (b as FrameElement).presentationOrder !== null;
@@ -32,11 +22,9 @@ const LayersPanelComponent: React.FC = () => {
             if (aIsSlide && bIsSlide) {
                 return (a as FrameElement).presentationOrder! - (b as FrameElement).presentationOrder!;
             }
-            // A simple way to group slides together, you can refine this logic
-            if (aIsSlide) return -1;
+            if (aIsSlide) return -1; // Slides come first
             if (bIsSlide) return 1;
-
-            return b.zIndex - a.zIndex;
+            return b.zIndex - a.zIndex; // Then sort by zIndex
         });
     }, [elements]);
     
@@ -44,7 +32,6 @@ const LayersPanelComponent: React.FC = () => {
         const tree: React.ReactNode[] = [];
         const buildTree = (parentId: string | null, depth: number) => {
             sortedElements.filter(el => el.parentId === parentId)
-                // No need to sort again here, already sorted.
                 .forEach(element => {
                     tree.push(<LayerItem key={element.id} element={element} depth={depth} />);
                     if (element.element_type === 'frame' || element.element_type === 'group') {
@@ -64,16 +51,16 @@ const LayersPanelComponent: React.FC = () => {
     };
 
     return (
-        <div style={panelStyle}>
-            <div style={headerStyle}>
+        <div className={styles.panel}>
+            <div className={styles.header}>
                 <span>Navigator</span>
-                <button onClick={handlePresent} style={hasSlides ? presentButtonStyle : presentButtonDisabledStyle} disabled={!hasSlides}>
-                    <PresentationIcon /> Present
+                <button onClick={handlePresent} className={hasSlides ? styles.presentButton : styles.presentButtonDisabled} disabled={!hasSlides} title="Start Presentation">
+                    <PresentationIcon size={18} className={styles.presentButtonIcon} /> Present
                 </button>
             </div>
             
-            <div style={scrollableAreaStyle}>
-                <div style={sectionTitleStyle}>Layers</div>
+            <div className={styles.scrollableArea}>
+                <div className={styles.sectionTitle}>Layers</div>
                 <div>{layerTree}</div>
             </div>
         </div>
@@ -82,6 +69,8 @@ const LayersPanelComponent: React.FC = () => {
 
 export const LayersPanel: React.FC = () => {
     return (
+        // DndProvider should ideally be higher up, but for this panel's scope, it's fine.
+        // If you have multiple draggable components, consider moving it to App.tsx or main.tsx.
         <DndProvider backend={HTML5Backend}>
             <LayersPanelComponent />
         </DndProvider>

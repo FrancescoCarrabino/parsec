@@ -1,10 +1,11 @@
-// src/panels/LayersPanel/SlidesList.tsx
 import React from 'react';
 import { useDrop } from 'react-dnd';
+import { useAppState } from '../../state/AppStateContext'; // To get theme colors for feedback
 import { webSocketClient } from '../../api/websocket_client';
 import { SlideItem } from './SlideItem';
 import type { FrameElement } from '../../state/types';
 import { ItemTypes } from './constants';
+import styles from './LayersPanel.module.css'; // Use the same module
 
 interface SlidesListProps {
     slides: FrameElement[];
@@ -17,44 +18,39 @@ interface DraggableLayerItem {
 }
 
 export const SlidesList: React.FC<SlidesListProps> = ({ slides }) => {
+    const { state } = useAppState(); // To access theme colors
 
-    const [{ isOver }, drop] = useDrop(() => ({
+    const [{ isOver }, drop] = useDrop<{ id: string; elementType: string; presentationOrder: number | null }, void, { isOver: boolean }>({
         accept: ItemTypes.LAYER,
-        // --- THIS IS THE FIX ---
         drop: (item: DraggableLayerItem) => {
-            // The drop handler no longer calculates state. It just sends the user's intent.
-            webSocketClient.sendUpdatePresentationOrder({
-                action: 'add',
-                frame_id: item.id,
-            });
+            if (item.elementType === 'frame' && item.presentationOrder === null) {
+                webSocketClient.sendUpdatePresentationOrder({
+                    action: 'add',
+                    frame_id: item.id,
+                });
+            }
         },
-        // canDrop logic is still correct from the "Smart Item" fix.
         canDrop: (item: DraggableLayerItem) => {
+            // Only allow frames that are NOT already slides to be dropped
             return item.elementType === 'frame' && item.presentationOrder === null;
         },
         collect: monitor => ({ isOver: monitor.isOver() && monitor.canDrop() }),
-    }));
+    });
 
-    const dropZoneStyle: React.CSSProperties = {
-        flexGrow: 1,
-        minHeight: '60px',
-        padding: '4px',
-        borderRadius: '4px',
-        background: isOver ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
-        border: isOver ? '2px dashed #00aaff' : '2px dashed transparent',
-        transition: 'all 150ms ease-in-out',
-    };
+    const dropZoneClasses = clsx(styles.slidesDropZone, {
+        [styles.isOver]: isOver,
+    });
 
     return (
-        <div ref={drop} style={dropZoneStyle}>
+        <div ref={drop} className={dropZoneClasses}>
             {slides.length > 0 ? (
+                // Pass slides list to SlideItem for context
                 slides.map((frame, index) => (
-                    // The SlideItem needs the full list to calculate reordering on its end.
                     <SlideItem key={frame.id} slides={slides} frame={frame} index={index} />
                 ))
             ) : (
-                <p style={{ textAlign: 'center', color: '#666', fontSize: '12px', padding: '10px' }}>
-                    Drag frames from the layers list below to add them to the presentation.
+                <p className={styles.noSlidesMessage}>
+                    Drag frames from the layers list above to add them to the presentation.
                 </p>
             )}
         </div>

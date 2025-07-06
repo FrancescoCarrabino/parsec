@@ -2,10 +2,12 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App'; // Assuming your main app component is here
+import App from './App';
 import { AppStateProvider } from './state/AppStateContext';
-import { DndProvider } from 'react-dnd'; // <--- IMPORT
-import { HTML5Backend } from 'react-dnd-html5-backend'; // <--- IMPORT
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
+import './App.css';
 
 import '@fontsource/inter/400.css';      // Regular
 import '@fontsource/inter/700.css';      // Bold
@@ -28,7 +30,7 @@ import '@fontsource/source-code-pro/600.css'; // Semi-Bold
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppStateProvider>
-      <DndProvider backend={HTML5Backend}> {/* <--- WRAP a DndProvider */}
+      <DndProvider backend={HTML5Backend}>
         <App />
       </DndProvider>
     </AppStateProvider>

@@ -1,0 +1,51 @@
+.appLayout {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--bg-base);
+  }
+  
+  .leftColumn {
+    display: flex;
+    flex-direction: column;
+    width: 260px;
+    flex-shrink: 0;
+    background-color: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+  }
+  
+  .mainContent {
+    flex-grow: 1;
+    position: relative; /* Crucial for positioning floating UI */
+    display: flex;
+    overflow: hidden; /* Canvas will handle its own overflow */
+  }
+  
+  /* Target Toolbar and ChatInput inside mainContent */
+  /* We need to give Toolbar and ChatInput a className prop in their App.tsx usage */
+  /* For now, let's make a placeholder targeting a direct child */
+  .mainContent > :global(.toolbar-wrapper) { /* Add a wrapper div to Canvas content */
+    position: absolute;
+    top: var(--space-4);
+    left: var(--space-4); /* Positioned to the left, not centered */
+    z-index: 10;
+  }
+  
+  .mainContent > :global(.chat-wrapper) { /* Add a wrapper div for chat input */
+    position: absolute;
+    bottom: var(--space-6);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    width: clamp(300px, 60vw, 700px);
+  }
+  
+  .rightColumn {
+    display: flex;
+    flex-direction: column;
+    width: 280px; /* Slightly wider for properties */
+    flex-shrink: 0;
+    background-color: var(--bg-surface);
+    border-left: 1px solid var(--border-subtle);
+  }

@@ -1,0 +1,40 @@
+.chatContainer {
+    position: absolute;
+    bottom: var(--space-6); /* 24px */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    width: clamp(300px, 60vw, 700px); /* Responsive width */
+    
+    background: var(--bg-surface); /* Use surface for the container background */
+    backdrop-filter: blur(10px); /* More subtle blur */
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg); /* 8px */
+    padding: var(--space-2); /* 8px */
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  
+  .chatForm {
+    display: flex;
+    width: 100%;
+  }
+  
+  .inputField {
+    flex-grow: 1;
+    border: none;
+    background: transparent;
+    padding: var(--space-3) var(--space-4); /* 12px 16px */
+    font-size: 16px;
+    color: var(--text-primary);
+    outline: none;
+    font-family: var(--font-sans); /* Ensure correct font */
+  }
+  
+  .inputField::placeholder {
+    color: var(--text-secondary);
+  }
+  
+  .inputField:focus {
+    /* Optional: Add a focus ring if desired, but the blur effect might suffice */
+  }

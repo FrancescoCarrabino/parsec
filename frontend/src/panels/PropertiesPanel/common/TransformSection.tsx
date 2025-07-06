@@ -1,37 +1,41 @@
 // src/panels/PropertiesPanel/common/TransformSection.tsx
 import React from 'react';
-import { PropertyGroup } from './PropertyGroup';
-import { PropertyRow, PropertyLabel, StringInput } from './CommonControls';
+import { PropertyGroup, PropertyRow, PropertyLabel, StringInput } from './CommonControls';
 import type { CanvasElement } from '../../../state/types';
+import styles from '../PropertiesPanel.module.css'; // Import the shared module
 
 interface TransformSectionProps {
     element: CanvasElement;
     onUpdate: (updates: Partial<CanvasElement>) => void;
 }
 
-const NumberInput: React.FC<{ label: string, value: number, onUpdate: (val: number) => void }> = ({ label, value, onUpdate }) => (
+// Renamed from NumberInput to be more generic if needed, but purpose is number input
+const DimensionInput: React.FC<{ label: string, value: number | string | undefined | null, onUpdate: (val: number) => void, step?: string }> = ({ label, value, onUpdate, step }) => (
+    // Each DimensionInput is a PropertyRow, placed by the parent grid
     <PropertyRow>
         <PropertyLabel>{label}</PropertyLabel>
-        <StringInput type="number" value={String(value)} onChange={(e) => onUpdate(parseFloat(e.target.value) || 0)} />
+        <StringInput type="number" value={String(value ?? '')} onChange={(e) => onUpdate(parseFloat(e.target.value) || 0)} step={step} />
     </PropertyRow>
 );
 
 export const TransformSection: React.FC<TransformSectionProps> = ({ element, onUpdate }) => {
     return (
         <PropertyGroup title="Transform">
+            {/* Name Input - A single PropertyRow */}
             <PropertyRow>
                 <PropertyLabel>Name</PropertyLabel>
-                <StringInput type="text" value={element.name} onChange={(e) => onUpdate({ name: e.target.value })} />
+                <StringInput type="text" value={element.name || ''} onChange={(e) => onUpdate({ name: e.target.value })} />
             </PropertyRow>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <NumberInput label="X" value={element.x} onUpdate={(val) => onUpdate({ x: val })} />
-                <NumberInput label="Y" value={element.y} onUpdate={(val) => onUpdate({ y: val })} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <NumberInput label="Width" value={element.width} onUpdate={(val) => onUpdate({ width: val })} />
-                <NumberInput label="Height" value={element.height} onUpdate={(val) => onUpdate({ height: val })} />
-            </div>
-            <NumberInput label="Rotation" value={element.rotation} onUpdate={(val) => onUpdate({ rotation: val })} />
+            {/* X input - A single PropertyRow */}
+            <DimensionInput label="X" value={element.x} onUpdate={(val) => onUpdate({ x: val })} />
+            {/* Y input - A single PropertyRow */}
+            <DimensionInput label="Y" value={element.y} onUpdate={(val) => onUpdate({ y: val })} />
+            {/* Width input - A single PropertyRow */}
+            <DimensionInput label="Width" value={element.width} onUpdate={(val) => onUpdate({ width: val })} />
+            {/* Height input - A single PropertyRow */}
+             <DimensionInput label="Height" value={element.height} onUpdate={(val) => onUpdate({ height: val })} />
+             {/* Rotation input - A single PropertyRow */}
+            <DimensionInput label="Rotation" value={element.rotation} onUpdate={(val) => onUpdate({ rotation: val })} step="1" />
         </PropertyGroup>
     );
 };

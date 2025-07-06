@@ -1,0 +1,44 @@
+.toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1); /* 4px */
+    background-color: var(--bg-surface);
+    padding: var(--space-2); /* 8px */
+    border-radius: var(--radius-lg); /* 8px */
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 20; /* As you had it */
+  
+    /* Positioning will be handled by the parent (App.tsx) */
+    /* Remove these if App.tsx controls positioning: */
+    position: absolute; /* Kept for now, but will be handled by App.tsx */
+    top: var(--space-4); /* 16px */
+    left: var(--space-4); /* 16px */
+    transform: none; /* Kept for now */
+  }
+  
+  .toolButton {
+    background: none;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2); /* 8px */
+    border-radius: var(--radius-sm); /* 4px */
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-fast);
+    width: 40px; /* Fixed size */
+    height: 40px; /* Fixed size */
+    font-size: 20px; /* Icon size */
+  }
+  
+  .toolButton:hover {
+    background: var(--bg-element-hover);
+    color: var(--text-primary);
+  }
+  
+  .toolButton.active {
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+  }

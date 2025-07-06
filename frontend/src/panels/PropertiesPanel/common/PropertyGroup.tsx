@@ -1,30 +1,24 @@
 // src/panels/PropertiesPanel/common/PropertyGroup.tsx
 import React, { useState } from 'react';
+import styles from '../PropertiesPanel.module.css'; // Import the shared module
+import { ChevronDown, ChevronRight } from 'lucide-react'; // Import icons
 
-const groupStyle: React.CSSProperties = {
-    borderBottom: '1px solid #3a3a3a',
-    paddingBottom: '10px',
-    marginBottom: '10px',
-};
+interface PropertyGroupProps {
+    title: string;
+    children: React.ReactNode;
+    defaultOpen?: boolean; // Add option for initial state
+}
 
-const titleStyle: React.CSSProperties = {
-    color: '#aaa',
-    fontSize: '11px',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    marginBottom: '8px',
-    cursor: 'pointer',
-};
-
-export const PropertyGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
-    const [isOpen, setIsOpen] = useState(true);
+export const PropertyGroup: React.FC<PropertyGroupProps> = ({ title, children, defaultOpen = true }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
 
     return (
-        <div style={groupStyle}>
-            <div style={titleStyle} onClick={() => setIsOpen(!isOpen)}>
-                {title} {isOpen ? '▼' : '►'}
+        <div className={styles.propertyGroup}>
+            <div className={styles.propertyGroupTitle} onClick={() => setIsOpen(!isOpen)}>
+                {title}
+                {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {/* Use icons with size */}
             </div>
-            {isOpen && <div>{children}</div>}
+            {isOpen && <div className={styles.propertyGroupContent}>{children}</div>}
         </div>
     );
 };
