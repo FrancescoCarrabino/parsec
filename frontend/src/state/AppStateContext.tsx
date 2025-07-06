@@ -142,6 +142,20 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
                     currentSlideIndex: action.payload.index,
                 }
             };
+            case 'WORKSPACE_RESET': {
+              const elementsRecord: Record<string, CanvasElement> = {};
+              // The payload from an undo/redo might not have all component defs, so we only update elements.
+              // This assumes component definitions don't change as part of the undoable history.
+              action.payload.elements.forEach(el => {
+                  elementsRecord[el.id] = el;
+              });
+              return {
+                  ...state,
+                  elements: elementsRecord,
+                  // It's good practice to clear selection after a major state reset.
+                  selectedElementIds: [],
+              };
+          }
             
         default:
             return state;

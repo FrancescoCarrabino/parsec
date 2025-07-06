@@ -106,10 +106,17 @@ export const Canvas = () => {
       if (horizontalGuide) { finalPos.y += horizontalGuide.offset; }
       draggedNode.position(finalPos);
       setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
+      webSocketClient.sendElementUpdate(
+        { id: draggedNode.id(), x: finalPos.x, y: finalPos.y },
+        false // do not commit to history
+    );
   };
 
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-      webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() });
+      webSocketClient.sendElementUpdate(
+        { id: e.target.id(), x: e.target.x(), y: e.target.y() },
+        true // commit this final state to history
+    );
       setGuides([]);
   };
 

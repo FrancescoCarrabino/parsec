@@ -1,16 +1,20 @@
 // src/panels/PropertiesPanel/common/ArrangeSection.tsx
 import React from 'react';
-import { PropertyGroup } from '../common/PropertyGroup';
-import { ActionButton } from '../common/CommonControls';
+import { PropertyGroup } from './PropertyGroup';
+import { ActionButton } from './CommonControls';
 import { webSocketClient } from '../../../api/websocket_client';
+import type { CanvasElement } from '../../../state/types'; // Import the main type
 
+// --- THIS IS THE FIX: The component now expects the full element object ---
 interface ArrangeSectionProps {
-    elementId: string;
+    element: CanvasElement;
 }
 
-export const ArrangeSection: React.FC<ArrangeSectionProps> = ({ elementId }) => {
+export const ArrangeSection: React.FC<ArrangeSectionProps> = ({ element }) => {
+    // The handler now has access to all of the element's properties.
     const handleArrange = (command: string) => {
-        webSocketClient.sendReorderElement(elementId, command);
+        // The WebSocket call now correctly sends all required information.
+        webSocketClient.sendReorderElement(element.id, command);
     };
 
     const gridStyle: React.CSSProperties = {
