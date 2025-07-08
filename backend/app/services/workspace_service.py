@@ -1,3 +1,4 @@
+# backend/app/services/workspace_service.py
 import copy
 from typing import Dict, Union, List, Optional, Tuple
 from loguru import logger
@@ -160,6 +161,27 @@ class WorkspaceService:
     def get_all_component_definitions(self) -> List[Dict]:
         return [definition.model_dump() for definition in self.component_definitions.values()]
 
+    def analyze_text_element(self, element_id: str) -> Optional[Dict]:
+        """
+        Retrieves specific properties of a TextElement for AI analysis.
+        Returns a dictionary of text properties or None if the element is not found
+        or is not a TextElement.
+        """
+        element = self.elements.get(element_id)
+        if not isinstance(element, TextElement):
+            logger.warning(f"Element {element_id} is not a TextElement or does not exist.")
+            return None
+        
+        return {
+            "id": element.id,
+            "content": element.content,
+            "fontFamily": element.fontFamily,
+            "fontWeight": element.fontWeight,
+            "fontSize": element.fontSize,
+            "letterSpacing": element.letterSpacing,
+            "lineHeight": element.lineHeight,
+            # Potentially add color, alignment etc. if relevant for AI analysis
+        }
     # ===================================================================
     # INTERNAL HELPER METHODS (These DO NOT commit to history)
     # ===================================================================
@@ -313,3 +335,50 @@ class WorkspaceService:
             else: current_slides.insert(target_index, dragged_element)
         except (StopIteration, ValueError): return []
         return self._set_presentation_order([s.id for s in current_slides])
+
+    def get_text_element_properties(self, element_id: str) -> Optional[Dict]:
+        """
+        Retrieves specific properties of a TextElement for AI analysis.
+        Returns a dictionary of text properties or None if the element is not found
+        or is not a TextElement.
+        """
+        element = self.elements.get(element_id)
+        if not isinstance(element, TextElement):
+            logger.warning(f"Attempted to analyze non-TextElement or non-existent element: {element_id}")
+            return None
+        
+        return {
+            "id": element.id,
+            "content": element.content,
+            "fontFamily": element.fontFamily,
+            "fontWeight": element.fontWeight,
+            "fontSize": element.fontSize,
+            "letterSpacing": element.letterSpacing,
+            "lineHeight": element.lineHeight,
+            "textAlign": element.textAlign, # Added textAlign as it's a common text property
+        }
+    # ===================================================================
+    # NEW METHODS FOR AI CONTENT CRAFTER AGENT
+    # ===================================================================
+    
+    # Method for update_text_element_content
+    def update_text_content(self, element_id: str, new_text: str) -> Optional[AnyElement]:
+        """
+        Updates the content of a TextElement. This method DOES NOT commit history.
+        It's intended for internal agent use where AgentService manages the commit.
+        """
+        # We use the generic update_element method, ensuring the 'content' key is passed.
+        # The update_element method handles validation but *not* history commit here.
+        updates = {"content": new_text}
+        updated_element = self.update_element(element_id, updates, commit_history=False) # Important: commit_history=False
+        return updated_element
+
+    def get_text_element_content(self, element_id: str) -> Optional[str]:
+        """
+        Retrieves the content of a TextElement by its ID.
+        """
+        element = self.elements.get(element_id)
+        if isinstance(element, TextElement):
+            return element.content
+        logger.warning(f"Element {element_id} is not a TextElement or does not exist.")
+        return None
