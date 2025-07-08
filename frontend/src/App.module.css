@@ -19,7 +19,8 @@
     flex-grow: 1;
     position: relative; /* Crucial for positioning floating UI */
     display: flex;
-    overflow: hidden; /* Canvas will handle its own overflow */
+    overflow: hidden;
+    position: relative; /* Canvas will handle its own overflow */
   }
   
   /* Target Toolbar and ChatInput inside mainContent */

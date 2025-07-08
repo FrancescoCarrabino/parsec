@@ -65,7 +65,7 @@ export const ElementTreeRenderer = React.memo(function ElementTreeRenderer({
                   height={frameElement.height}
                   fill={frameElement.fill?.type === 'solid' ? frameElement.fill.color : '#FFFFFF'}
                   cornerRadius={frameElement.cornerRadius || 0}
-                  listening={false} // The background shouldn't trap events from children
+                  listening={isContainerDraggable} // The background shouldn't trap events from children
                 />
               )}
               

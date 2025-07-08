@@ -83,6 +83,18 @@ export interface PresentationState {
     presenterWindow: Window | null;
 }
 
+export interface AgentStatus {
+	status: string; // e.g., 'PLANNING', 'EXECUTING_TASK', 'COMPLETED'
+	message: string;
+	details?: {
+	  task_number?: number;
+	  total_tasks?: number;
+	  agent_name?: string;
+	  target_agent?: string;
+	  target_tool?: string; // To support your new update
+	};
+  }
+
 // MODIFIED: The main AppState now includes the presentation state
 export type AppState = {
 	elements: Record<string, CanvasElement>;
@@ -91,8 +103,11 @@ export type AppState = {
 	groupEditingId: string | null;
 	activeTool: ActiveTool;
     editingElementId: string | null;
-    presentation: PresentationState; // <-- NEW
+    presentation: PresentationState;
+	agentStatus: AgentStatus | null;
 };
+
+
 
 // MODIFIED: Added new actions for presentation mode
 export type Action =
@@ -114,4 +129,6 @@ export type Action =
     | { type: 'STOP_PRESENTATION' }
     | { type: 'NEXT_SLIDE' }
     | { type: 'PREV_SLIDE' }
-    | { type: 'SET_SLIDE'; payload: { index: number } };
+    | { type: 'SET_SLIDE'; payload: { index: number } }
+    | { type: 'AGENT_STATUS_UPDATE'; payload: AgentStatus }
+    | { type: 'CLEAR_AGENT_STATUS' };
