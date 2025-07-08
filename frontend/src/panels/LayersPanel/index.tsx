@@ -75,4 +75,4 @@ export const LayersPanel: React.FC = () => {
             <LayersPanelComponent />
         </DndProvider>
     );
-};
+}; 

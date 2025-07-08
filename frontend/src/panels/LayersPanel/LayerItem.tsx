@@ -34,6 +34,7 @@ const ElementIconMap: Record<CanvasElement['element_type'], React.ElementType> =
 export const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
     const ref = useRef<HTMLDivElement>(null);
     const { state, dispatch } = useAppState();
+    const { selectedElementIds } = state; 
     
     const [indentationWidth, setIndentationWidth] = useState<number>(16); // Default value
 

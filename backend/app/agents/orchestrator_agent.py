@@ -1,10 +1,15 @@
 import json
 import litellm
 from loguru import logger
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable
 from pydantic import BaseModel, Field
 from ..core.config import settings
 from .registry import AgentRegistry
+
+# A do-nothing fallback function to make the send_status_update parameter optional and safe.
+async def _do_nothing_sender(status: str, message: str, details: Dict = None):
+    pass
+
 
 # --- Plan Model Definition ---
 class Plan(BaseModel):
@@ -24,7 +29,7 @@ class OrchestratorAgent:
         self.agent_registry = agent_registry
         logger.info("OrchestratorAgent initialized.")
 
-    async def create_plan(self, prompt: str, selected_ids: List[str] = None) -> Plan:
+    async def create_plan(self, prompt: str, selected_ids: List[str] = None, send_status_update: Callable = _do_nothing_sender) -> Plan:
         """
         Generates a plan (list of tasks) based on the user's prompt and current context.
         """
@@ -148,6 +153,7 @@ class OrchestratorAgent:
         messages = [{"role": "system", "content": system_prompt}]
 
         try:
+            await send_status_update("PLANNING", "Formulating a high-level plan...")
             logger.debug(f"Sending prompt to LLM:\n{system_prompt}") # Log the full prompt for debugging
             
             response = await litellm.acompletion(
@@ -204,10 +210,13 @@ class OrchestratorAgent:
 
         except json.JSONDecodeError as e:
             logger.error(f"LLM response was not valid JSON: {e}. Response: {plan_json_str}")
+            await send_status_update("ERROR", str(e))
             return Plan() # Return empty plan on JSON error
         except ValueError as e:
             logger.error(f"LLM response failed Pydantic validation: {e}. Response: {plan_json_str}")
+            await send_status_update("ERROR", str(e))
             return Plan() # Return empty plan on validation error
         except Exception as e:
             logger.exception(f"Orchestrator failed during plan creation: {e}")
+            await send_status_update("ERROR", str(e))
             return Plan() # Return empty plan on any other exception

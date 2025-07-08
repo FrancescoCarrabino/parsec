@@ -105,7 +105,8 @@ class CanvasAgent(Agent):
         self,
         objective: str,
         context: Dict[str, Any],
-        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]]
+        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]],
+        send_status_update: Callable
     ) -> Dict[str, Any]:
         """
         This is the agent's "brain". It uses an LLM to plan and execute the objective.
@@ -155,10 +156,12 @@ class CanvasAgent(Agent):
                     if tool_name == "invoke_agent":
                         agent_to_call = tool_args.get("agent_name")
                         agent_objective = tool_args.get("objective")
+                        await send_status_update("INVOKING_AGENT", f"Asking the {agent_to_call} for help...", {"target_agent": agent_to_call})
                         tool_result = await invoke_agent(agent_to_call, agent_objective, context)
                     else:
                         tool_function = self.available_functions.get(tool_name)
                         # Pass context so tools can append commands
+                        await send_status_update("INVOKING_TOOL", f"Using the tool {tool_function}...", {"target_tool": tool_name})
                         tool_result = await tool_function(context=context, **tool_args)
                     
                     messages.append({

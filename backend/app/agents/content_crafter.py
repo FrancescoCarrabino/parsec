@@ -45,7 +45,8 @@ class ContentCrafter(Agent):
         self,
         objective: str,
         context: Dict[str, Any],
-        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]]
+        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]],
+        send_status_update: Callable
     ) -> Dict[str, Any]:
         """
         This agent's task is simple: take an objective, ask the LLM to write content,

@@ -76,7 +76,8 @@ class LayoutMaestro(Agent):
         self,
         objective: str,
         context: Dict[str, Any],
-        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]]
+        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]],
+        send_status_update: Callable
     ) -> Dict[str, Any]:
         logger.info(f"Agent '{self.name}' activated with objective: '{objective}'")
         element_ids = context.get("selected_ids", [])
@@ -125,7 +126,8 @@ class LayoutMaestro(Agent):
                 if not tool_function:
                     logger.error(f"LayoutMaestro received unimplemented tool call: {tool_name}")
                     continue # Skip to next tool call if one is bad
-
+                
+                await send_status_update("INVOKING_TOOL", f"Using the tool {tool_function}...", {"target_tool": tool_name})
                 await tool_function(context=context, element_ids=element_ids, **tool_args)
             
             return {"status": "success"}

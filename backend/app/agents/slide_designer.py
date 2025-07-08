@@ -97,7 +97,7 @@ class SlideDesigner(Agent):
             "invoke_agent": None # This is handled specially in run_task
         }
 
-    async def run_task(self, objective: str, context: Dict[str, Any], invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]]) -> Dict[str, Any]:
+    async def run_task(self, objective: str, context: Dict[str, Any], invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]], send_status_update: Callable) -> Dict[str, Any]:
         logger.info(f"Agent '{self.name}' activated with objective: '{objective}'")
         
         # This is the agent's "brain". It uses an LLM to think for itself.
@@ -150,11 +150,13 @@ class SlideDesigner(Agent):
                         # Special handling for inter-agent communication
                         agent_to_call = tool_args.get("agent_name")
                         agent_objective = tool_args.get("objective")
+                        await send_status_update("INVOKING_AGENT", f"Asking the {agent_to_call} for help...", {"target_agent": agent_to_call})
                         tool_result = await invoke_agent(agent_to_call, agent_objective, context)
                     else:
                         # Standard internal tool call
                         tool_function = self.available_functions.get(tool_name)
                         # We pass the context so tools can append commands directly
+                        await send_status_update("INVOKING_TOOL", f"Using the tool {tool_name}...", {"target_tool": tool_name})
                         tool_result = await tool_function(context=context, **tool_args)
                     
                     # Append tool result to conversation for the next reasoning step

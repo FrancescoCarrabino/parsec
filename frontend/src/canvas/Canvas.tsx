@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Stage, Layer, Transformer, Line } from 'react-konva';
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
@@ -41,41 +41,61 @@ export const Canvas = () => {
   
   // Initialize Canvas Interaction Hooks
   const isDrawingOrEditing = drawingTool.isDrawing || penTool.isDrawing || isEditingPath;
-  const { stagePos, stageScale, isPanning, handleWheel } = usePanAndZoom(drawingTool.isDrawing, isEditingPath);
+  const { stagePos, stageScale, isPanning, handleWheel, panOnMouseDown, panOnMouseMove, panOnMouseUp } = usePanAndZoom();
   const { guides, dragHandlers, transformHandlers } = useElementTransformer({
     stageRef,
     transformerRef,
     isEditing: isDrawingOrEditing || isEditingText,
   });
   const { handleDragOver, handleDrop } = useComponentDrop(stageRef);
-  useCanvasKeyboardShortcuts(drawingTool.isDrawing, penTool.isDrawing, isEditingPath, isEditingText, {
+  const toolControls = useMemo(() => ({
     cancelDrawing: drawingTool.cancel,
     cancelPen: penTool.cancel,
     confirmPen: penTool.onDblClick,
-  });
+  }), [drawingTool.cancel, penTool.cancel, penTool.onDblClick]); // Dependencies are the functions themselves
+
+  // Now, call the hook with the stable, memoized object.
+  useCanvasKeyboardShortcuts(
+    drawingTool.isDrawing,
+    penTool.isDrawing,
+    isEditingPath,
+    isEditingText,
+    toolControls
+  );
 
   const pathEditor = usePathEditor(editingPath, stageScale);
 
   // Event Orchestration
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     e.evt.preventDefault();
-    penTool.onMouseDown(e);
-    drawingTool.onMouseDown(e);
-    if (activeTool === 'select' && e.target === e.target.getStage()) {
-      marqueeTool.onMouseDown(e);
+    panOnMouseDown(e); // Let the pan hook handle middle-click first
+
+    if (!isPanning) { // Only run tools if not panning
+        penTool.onMouseDown(e);
+        drawingTool.onMouseDown(e);
+        if (activeTool === 'select' && e.target === e.target.getStage()) {
+            marqueeTool.onMouseDown(e);
+        }
     }
   };
 
   const handleMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-    penTool.onMouseMove(e);
-    drawingTool.onMouseMove(e);
-    marqueeTool.onMouseMove(e);
+    // Both can run; the pan hook will check its own `isPanning` state.
+    panOnMouseMove(e); 
+    
+    if (!isPanning) {
+        penTool.onMouseMove(e);
+        drawingTool.onMouseMove(e);
+        marqueeTool.onMouseMove(e);
+    }
   };
 
   const handleMouseUp = (e: KonvaEventObject<MouseEvent>) => {
+    panOnMouseUp(e); // Always allow panning to stop
+
+    // The tools will check their own state, so this is safe
     drawingTool.onMouseUp(e);
     marqueeTool.onMouseUp(e);
-    // penTool does not have onMouseUp
   };
   
   const handleClick = (e: KonvaEventObject<MouseEvent>) => {
@@ -153,11 +173,10 @@ export const Canvas = () => {
         scaleX={stageScale} scaleY={stageScale}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
+        onMouseMove={handleMouseMove}    
         onMouseUp={handleMouseUp}
         onClick={handleClick}
         onDblClick={handleDblClick}
-        draggable={isPanning}
       >
         <Layer>
           <ElementTreeRenderer

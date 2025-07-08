@@ -20,10 +20,13 @@ export const useMarqueeSelect = (activeTool: string) => {
 	const isMarqueeToolActive = activeTool === 'select';
 
 	const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+
 		if (!isMarqueeToolActive || e.target !== e.target.getStage()) return;
-		setIsSelecting(true);
+		
+        setIsSelecting(true);
 		const pos = e.target.getStage()?.getRelativePointerPosition();
 		if (!pos) return;
+
 		setMarqueeRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
 		if (!e.evt.shiftKey) {
 			dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });

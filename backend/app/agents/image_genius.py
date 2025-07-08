@@ -34,7 +34,8 @@ class ImageGenius(Agent):
         self,
         objective: str,
         context: Dict[str, Any],
-        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]]
+        invoke_agent: Callable[[str, str, Dict], Coroutine[Any, Any, Any]],
+        send_status_update: Callable
     ) -> Dict[str, Any]:
         """
         Takes a descriptive objective as a prompt, generates an image using the image model,
