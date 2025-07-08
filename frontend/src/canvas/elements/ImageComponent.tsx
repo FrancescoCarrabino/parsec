@@ -6,14 +6,9 @@ import useImage from 'use-image';
 import type { ImageElement } from '../../state/types';
 
 interface ImageComponentProps {
-  element: ImageElement;
-  isVisible: boolean;
-  onDragStart: (e: KonvaEventObject<DragEvent>) => void;
-  onDragMove: (e: KonvaEventObject<DragEvent>) => void;
-  onDragEnd: (e: KonvaEventObject<DragEvent>) => void;
-  onDblClick: (e: KonvaEventObject<MouseEvent>) => void;
-}
-
+    element: ImageElement;
+    [key: string]: any; // Allows it to accept 'draggable', 'isVisible', handlers, etc.
+  }
 const ImageComponent: React.FC<ImageComponentProps> = ({ element, ...props }) => {
   const [img, status] = useImage(element.src, 'anonymous');
 
@@ -22,25 +17,23 @@ const ImageComponent: React.FC<ImageComponentProps> = ({ element, ...props }) =>
     return null;
   }
 
-  const isDraggable = !element.parentId; // Only top-level elements are directly draggable for now
-
   return (
     <Image
       image={img}
       id={element.id}
-      name={`${element.id} element`} // Match the class name for snapping
+      name={`${element.id} element`}
       x={element.x}
       y={element.y}
       width={element.width}
       height={element.height}
       rotation={element.rotation}
+      // --- MODIFICATION 3: APPLY ALL PROPS DIRECTLY ---
+      // The '...props' object now contains everything we need:
+      // - draggable: boolean
+      // - isVisible: boolean (which we apply to the 'visible' prop)
+      // - onDragStart, onDragMove, onDragEnd, onDblClick handlers
       visible={props.isVisible}
-      draggable={isDraggable}
-      // Pass all the event handlers from the renderer
-      onDragStart={props.onDragStart}
-      onDragMove={props.onDragMove}
-      onDragEnd={props.onDragEnd}
-      onDblClick={props.onDblClick}
+      {...props}
     />
   );
 };

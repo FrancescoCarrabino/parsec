@@ -84,6 +84,14 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
             // Add the (potentially defaulted) new element to the state
             return { ...state, elements: { ...state.elements, [newElement.id]: newElement } };
         }
+        case 'ELEMENTS_CREATED': {
+          const newElements = { ...state.elements };
+          action.payload.forEach(el => {
+              // You can add the same default property logic for text elements here if needed
+              newElements[el.id] = el;
+          });
+          return { ...state, elements: newElements };
+      }
 
         case 'ELEMENT_UPDATED': {
             let updatedElement = action.payload;
@@ -105,6 +113,7 @@ const appStateReducer = (state: AppState, action: Action): AppState => {
             // Update the element in the state
             return { ...state, elements: { ...state.elements, [updatedElement.id]: updatedElement } };
         }
+        
 
         case 'ELEMENTS_UPDATED': {
             const newElements = { ...state.elements };

@@ -114,9 +114,29 @@ export const LayerItem: React.FC<LayerItemProps> = ({ element, depth }) => {
     drag(drop(ref));
 
     const isSelected = state.selectedElementIds.includes(element.id);
-    const handleSelect = (e: React.MouseEvent) => { 
-        e.stopPropagation(); 
-        dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } }); 
+    const handleSelect = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Keep this to prevent unintended side-effects
+
+        // Check for Shift or Ctrl/Cmd (metaKey for Mac)
+        const isMultiSelect = e.shiftKey || e.ctrlKey || e.metaKey;
+
+        if (isMultiSelect) {
+            // --- TOGGLE BEHAVIOR ---
+            if (isSelected) {
+                // It's already selected, so remove it.
+                dispatch({ type: 'REMOVE_FROM_SELECTION', payload: { id: element.id } });
+            } else {
+                // It's not selected, so add it.
+                dispatch({ type: 'ADD_TO_SELECTION', payload: { id: element.id } });
+            }
+        } else {
+            // --- NORMAL CLICK BEHAVIOR ---
+            // Replace the entire selection with just this item.
+            // (Only dispatch if the selection is actually changing)
+            if (!isSelected || selectedElementIds.length > 1) {
+                dispatch({ type: 'SET_SELECTION', payload: { ids: [element.id] } });
+            }
+        }
     };
     
     const layerClasses = clsx(styles.layerItem, {

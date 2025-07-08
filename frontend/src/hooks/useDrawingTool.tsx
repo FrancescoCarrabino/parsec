@@ -22,9 +22,7 @@ const DEFAULT_TEXT_PROPERTIES: Omit<TextElement, keyof BaseElement | 'element_ty
 };
 
 
-// Assuming forceUpdate is still needed for some reason, otherwise it can be removed.
-// If your tools don't rely on forceUpdate anymore, you can remove the dependency.
-export const useDrawingTool = (forceUpdate: () => void) => {
+export const useDrawingTool = () => {
 	const { state, dispatch } = useAppState();
     const { activeTool } = state;
 	const [startPos, setStartPos] = useState<Vector2d | null>(null);
@@ -63,7 +61,6 @@ export const useDrawingTool = (forceUpdate: () => void) => {
 		setStartPos(pos);
 		setCurrentRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
 		setIsDrawing(true);
-        forceUpdate(); // Might still be needed for immediate preview updates
 	};
 
 	const onMouseMove = (e: KonvaEventObject<MouseEvent>) => {
@@ -79,7 +76,6 @@ export const useDrawingTool = (forceUpdate: () => void) => {
 			width: Math.abs(pos.x - startPos.x),
 			height: Math.abs(pos.y - startPos.y),
 		});
-        forceUpdate();
 	};
 
 	const onMouseUp = () => {
@@ -119,9 +115,6 @@ export const useDrawingTool = (forceUpdate: () => void) => {
         setIsDrawing(false);
 		setStartPos(null);
 		setCurrentRect(null);
-        if (wasDrawing) {
-            forceUpdate();
-        }
     };
 
 	const preview = isDrawing && currentRect ? (

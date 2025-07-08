@@ -58,6 +58,7 @@ export const Canvas = () => {
 
   // Event Orchestration
   const handleMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    e.evt.preventDefault();
     penTool.onMouseDown(e);
     drawingTool.onMouseDown(e);
     if (activeTool === 'select' && e.target === e.target.getStage()) {
@@ -78,25 +79,49 @@ export const Canvas = () => {
   };
   
   const handleClick = (e: KonvaEventObject<MouseEvent>) => {
-    if (isDrawingOrEditing || activeTool !== 'select' || e.target === stageRef.current) {
-        if(e.target === stageRef.current) dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
+    // This initial guard clause is perfect, no changes needed.
+    if (marqueeTool.isSelecting || isDrawingOrEditing || activeTool !== 'select') {
         return;
     }
+    
+    // This logic for deselecting on stage click is also perfect.
+    if (e.target === stageRef.current) {
+        dispatch({ type: 'SET_SELECTION', payload: { ids: [] } });
+        return;
+    }
+
     const id = e.target.id();
     const element = elements[id];
     if (!element) return;
 
+    // This logic for selecting the parent frame is also correct.
     const idToSelect = (element.parentId && !groupEditingId) ? element.parentId : id;
-    if (e.evt.shiftKey) {
-      if (selectedElementIds.includes(idToSelect)) {
-        dispatch({ type: 'REMOVE_FROM_SELECTION', payload: { id: idToSelect } });
-      } else {
-        dispatch({ type: 'ADD_TO_SELECTION', payload: { id: idToSelect } });
-      }
+
+    const isSelected = selectedElementIds.includes(idToSelect);
+
+    // --- NEW AND IMPROVED SELECTION LOGIC ---
+
+    // Check for Shift or Ctrl/Cmd (metaKey for Mac)
+    const isMultiSelect = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
+
+    if (isMultiSelect) {
+        // --- TOGGLE BEHAVIOR ---
+        if (isSelected) {
+            // It's already selected, so remove it from the selection.
+            dispatch({ type: 'REMOVE_FROM_SELECTION', payload: { id: idToSelect } });
+        } else {
+            // It's not selected, so add it to the selection.
+            dispatch({ type: 'ADD_TO_SELECTION', payload: { id: idToSelect } });
+        }
     } else {
-      dispatch({ type: 'SET_SELECTION', payload: { ids: [idToSelect] } });
+        // --- NORMAL CLICK BEHAVIOR ---
+        // If no modifier key is pressed, replace the entire selection.
+        // We add a small optimization to only update if the selection is different.
+        if (!isSelected || selectedElementIds.length > 1) {
+             dispatch({ type: 'SET_SELECTION', payload: { ids: [idToSelect] } });
+        }
     }
-  };
+};
 
   const handleDblClick = (e: KonvaEventObject<MouseEvent>) => {
     if (penTool.isDrawing) {
