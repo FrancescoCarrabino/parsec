@@ -3,7 +3,12 @@ import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { useAppState } from '../state/AppStateContext';
 import { webSocketClient } from '../api/websocket_client';
-import { getElementSnapLines, getGuides } from '../utils/snapUtils';
+import { 
+  getElementSnapLines, 
+  getStageSnapLines, 
+  findBestSnapGuides, 
+  applyTransformSnap 
+} from '../utils/snapUtils';
 import type { Guide, SnapLine } from '../utils/snapUtils';
 
 interface UseElementTransformerProps {
@@ -12,14 +17,18 @@ interface UseElementTransformerProps {
   isEditing: boolean; // True if text editing, path editing, or drawing is active
 }
 
+type SnapLines = { vertical: SnapLine[], horizontal: SnapLine[] };
+
 export const useElementTransformer = ({ stageRef, transformerRef, isEditing }: UseElementTransformerProps) => {
   const { state } = useAppState();
   const { elements, selectedElementIds } = state;
 
   const [guides, setGuides] = useState<Guide[]>([]);
-  const staticSnapLines = useRef<{ vertical: SnapLine[], horizontal: SnapLine[] }>({ vertical: [], horizontal: [] });
+  const elementSnapLines = useRef<SnapLines>({ vertical: [], horizontal: [] });
+  const stageSnapLines = useRef<SnapLines>({ vertical: [], horizontal: [] });
 
-  // Effect to attach selected nodes to the Transformer
+  // No need to read stageScale here, we'll get it fresh from the ref when needed.
+
   useEffect(() => {
     if (!transformerRef.current || !stageRef.current) return;
     
@@ -38,86 +47,131 @@ export const useElementTransformer = ({ stageRef, transformerRef, isEditing }: U
   const prepareStaticSnapLines = () => {
     const stage = stageRef.current;
     if (!stage) return;
-    const staticNodes = stage.find('.element').filter(node => !selectedElementIds.includes(node.id()));
-    
-    const lines = { vertical: [] as SnapLine[], horizontal: [] as SnapLine[] };
-    staticNodes.forEach(node => {
+
+    const elementLines: SnapLines = { vertical: [], horizontal: [] };
+    stage.find('.element')
+      .filter(node => !selectedElementIds.includes(node.id()))
+      .forEach(node => {
         const nodeLines = getElementSnapLines(node);
-        lines.vertical.push(...nodeLines.vertical);
-        lines.horizontal.push(...nodeLines.horizontal);
-    });
-    staticSnapLines.current = lines;
+        elementLines.vertical.push(...nodeLines.vertical);
+        elementLines.horizontal.push(...nodeLines.horizontal);
+      });
+    elementSnapLines.current = elementLines;
+      
+    stageSnapLines.current = getStageSnapLines(stage);
   };
 
-  const handleDragStart = (_e: KonvaEventObject<DragEvent>) => {
+  const getPrioritizedGuides = (draggedLines: SnapLines) => {
+    let bestSnaps = findBestSnapGuides(draggedLines, elementSnapLines.current);
+
+    if (!bestSnaps.vertical) {
+      const stageVerticalSnap = findBestSnapGuides(draggedLines, { vertical: stageSnapLines.current.vertical, horizontal: [] });
+      if (stageVerticalSnap.vertical) bestSnaps.vertical = stageVerticalSnap.vertical;
+    }
+
+    if (!bestSnaps.horizontal) {
+      const stageHorizontalSnap = findBestSnapGuides(draggedLines, { vertical: [], horizontal: stageSnapLines.current.horizontal });
+      if (stageHorizontalSnap.horizontal) bestSnaps.horizontal = stageHorizontalSnap.horizontal;
+    }
+    
+    return bestSnaps;
+  }
+  
+  /**
+   * NEW: This function takes absolute screen-space guides and converts their
+   * line coordinates to the stage's local space for correct rendering.
+   */
+  const setTransformedGuides = (activeGuides: Guide[]) => {
+    const stage = stageRef.current;
+    if (!stage || activeGuides.length === 0) {
+      setGuides([]);
+      return;
+    }
+
+    // Get the stage's transformation matrix and invert it
+    const transform = stage.getAbsoluteTransform().copy().invert();
+
+    const transformedGuides = activeGuides.map(guide => {
+      const [x1, y1, x2, y2] = guide.line;
+      // Transform the start and end points of the line
+      const p1 = transform.point({ x: x1, y: y1 });
+      const p2 = transform.point({ x: x2, y: y2 });
+      return {
+        ...guide,
+        line: [p1.x, p1.y, p2.x, p2.y],
+      };
+    });
+
+    setGuides(transformedGuides);
+  };
+
+
+  const handleInteractionStart = () => {
     prepareStaticSnapLines();
   };
 
   const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
     const draggedNode = e.target;
     const draggedLines = getElementSnapLines(draggedNode);
-    const activeGuides = getGuides(draggedLines, staticSnapLines.current);
+    const bestSnaps = getPrioritizedGuides(draggedLines);
     
+    const stageScale = stage.scaleX();
     let finalPos = { x: draggedNode.x(), y: draggedNode.y() };
     
-    const verticalGuide = activeGuides.vertical[0];
-    if (verticalGuide) { finalPos.x += verticalGuide.offset; }
-    
-    const horizontalGuide = activeGuides.horizontal[0];
-    if (horizontalGuide) { finalPos.y += horizontalGuide.offset; }
+    if (bestSnaps.vertical) { finalPos.x += bestSnaps.vertical.offset / stageScale; }
+    if (bestSnaps.horizontal) { finalPos.y += bestSnaps.horizontal.offset / stageScale; }
     
     draggedNode.position(finalPos);
-    setGuides([...activeGuides.vertical, ...activeGuides.horizontal]);
     
-    // Send ephemeral update without committing to history
+    const activeGuides = [bestSnaps.vertical, bestSnaps.horizontal].filter((g): g is Guide => !!g);
+    setTransformedGuides(activeGuides); // Use the new function to set guides
+    
     webSocketClient.sendElementUpdate({ id: draggedNode.id(), x: finalPos.x, y: finalPos.y }, false);
   };
 
-  const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
-    setGuides([]);
-    // Send final update and commit to history
-    webSocketClient.sendElementUpdate({ id: e.target.id(), x: e.target.x(), y: e.target.y() }, true);
-  };
-
-  const handleTransformStart = () => {
-    prepareStaticSnapLines();
-  };
-  
-  // Note: handleTransform logic is complex. This is a direct extraction. 
-  // Further refactoring within this function could be a future step.
   const handleTransform = (e: KonvaEventObject<Event>) => {
+    const stage = stageRef.current;
+    const tr = transformerRef.current;
+    if (!stage || !tr) return;
+
     const node = e.target;
-    // Reset scale to apply it directly to width/height
     node.setAttrs({
         width: node.width() * node.scaleX(),
         height: node.height() * node.scaleY(),
         scaleX: 1,
         scaleY: 1,
     });
-    // Snapping logic during transform can be complex to extract further, leaving as is.
-    // ... (rest of the handleTransform logic from original file)
-    setGuides([]); // For simplicity, guides on transform might be too noisy. Can be re-added if needed.
+
+    const transformingLines = getElementSnapLines(node);
+    const bestSnaps = getPrioritizedGuides(transformingLines);
+    
+    applyTransformSnap(node, tr, bestSnaps, stage.scaleX());
+    
+    const activeGuides = [bestSnaps.vertical, bestSnaps.horizontal].filter((g): g is Guide => !!g);
+    setTransformedGuides(activeGuides); // Use the new function to set guides
   };
 
-  const handleTransformEnd = (e: KonvaEventObject<Event>) => {
+  const handleInteractionEnd = (e: KonvaEventObject<Event | DragEvent>) => {
+    setGuides([]);
     const node = e.target;
-    const element = elements[node.id()];
-    if (!element) return;
-    
     const updatePayload = {
-        id: element.id,
+        id: node.id(),
         x: node.x(),
         y: node.y(),
         rotation: Math.round(node.rotation()),
-        width: node.width(),
-        height: node.height(),
+        // On transformEnd, width/height might still have scale applied if not reset in the last `transform` event
+        width: node.width() * node.scaleX(),
+        height: node.height() * node.scaleY(),
     };
     webSocketClient.sendElementUpdate(updatePayload, true);
-    setGuides([]);
   };
 
-  const dragHandlers = { onDragStart: handleDragStart, onDragMove: handleDragMove, onDragEnd: handleDragEnd };
-  const transformHandlers = { onTransformStart: handleTransformStart, onTransform: handleTransform, onTransformEnd: handleTransformEnd };
+  // Consolidate handlers for clarity
+  const dragHandlers = { onDragStart: handleInteractionStart, onDragMove: handleDragMove, onDragEnd: handleInteractionEnd };
+  const transformHandlers = { onTransformStart: handleInteractionStart, onTransform: handleTransform, onTransformEnd: handleInteractionEnd };
 
   return { guides, dragHandlers, transformHandlers };
 };

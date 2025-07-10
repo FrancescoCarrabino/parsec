@@ -7,28 +7,22 @@
   }
   
   .textarea {
-    box-sizing: border-box;
-    
-    background: var(--bg-surface); /* Keep surface background for consistency */
-    color: var(--text-primary); /* This should be controlled by the element's fontColor */
-    
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    
-    border: 1px solid var(--accent-primary); 
-    border-radius: var(--radius-sm);
-    
-    padding: 0; /* Padding is usually handled by Konva, or we'll apply it dynamically */
+    position: absolute; /* Style object will override this, but good to have */
+    border: 1px dashed #09f; /* A light blue dashed border to indicate editing */
+    background-color: rgba(255, 255, 255, 0.9); /* Slightly transparent background */
     margin: 0;
+    overflow: hidden; /* Hide scrollbars, we auto-resize instead */
+    resize: none; /* Disable manual resizing handle */
     
+    /* CRITICAL: This ensures padding and border are included in the width/height,
+       making our JS calculations much simpler and more accurate. */
+    box-sizing: border-box; 
+    
+    /* Reset some browser defaults */
     outline: none;
-    resize: none;
-    overflow: hidden;
-    
-    text-align: inherit;
-    
-    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
+    white-space: pre-wrap; /* Respect newlines */
+    word-wrap: break-word; /* Wrap long words */
+    display: inline-block; 
   }
   
   .textarea::placeholder {

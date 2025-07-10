@@ -1,30 +1,17 @@
 // parsec-frontend/src/canvas/utils/snapUtils.ts
 
 import Konva from 'konva';
-import type { CanvasElement } from '../../state/types';
+import { Transformer } from 'konva';
 
 // The distance in pixels at which snapping should occur.
-const SNAP_THRESHOLD = 5;
+const SNAP_THRESHOLD = 8; // Increased slightly for a better feel
 
-/**
- * Defines the structure for a "snap line" which can be horizontal or vertical.
- * 'value' is the x or y coordinate of the line.
- * 'orientation' specifies if it's 'V' (Vertical) or 'H' (Horizontal).
- * 'snapPoints' are the specific points on an element's edge that define this line.
- */
 export interface SnapLine {
   value: number;
   orientation: 'V' | 'H';
   snapPoints: number[];
 }
 
-/**
- * Defines the structure for a "guide line" that is rendered on the canvas.
- * It's a visual representation of a snap that has occurred.
- * 'line' is an array of coordinates [x1, y1, x2, y2].
- * 'snap' is the coordinate where the snap happened.
- * 'offset' is the distance we moved the element to make it snap.
- */
 export interface Guide {
   line: number[];
   snap: number;
@@ -33,130 +20,199 @@ export interface Guide {
 }
 
 /**
- * Calculates all possible vertical and horizontal snap lines for a given element.
+ * Calculates all possible vertical and horizontal snap lines for a given Konva node.
  * These lines correspond to the element's edges and its center.
- * @param element - The canvas element to generate lines for.
+ * @param element - The Konva node to generate lines for.
  * @returns An object containing arrays of vertical and horizontal SnapLines.
  */
 export const getElementSnapLines = (element: Konva.Node): { vertical: SnapLine[], horizontal: SnapLine[] } => {
-    // node.getAbsolutePosition() returns the position of the node relative to the top-left
-    // of the stage container. This is the true "World Space" position.
-    const pos = element.getAbsolutePosition();
-    
-    // We need the scaled width and height of the element.
-    const width = element.width() * element.scaleX();
-    const height = element.height() * element.scaleY();
-  
-    // Note: This logic assumes non-rotated rectangles. For rotated elements,
-    // we would need to calculate the bounding box of the rotated vertices.
-    // For this version, we will proceed with the non-rotated bounding box.
-    const x = pos.x;
-    const y = pos.y;
-    
-    return {
-      vertical: [
-        { value: x, orientation: 'V', snapPoints: [y, y + height] },
-        { value: x + width / 2, orientation: 'V', snapPoints: [y, y + height] },
-        { value: x + width, orientation: 'V', snapPoints: [y, y + height] },
-      ],
-      horizontal: [
-        { value: y, orientation: 'H', snapPoints: [x, x + width] },
-        { value: y + height / 2, orientation: 'H', snapPoints: [x, x + width] },
-        { value: y + height, orientation: 'H', snapPoints: [x, x + width] },
-      ],
-    };
+  const pos = element.getAbsolutePosition();
+  const width = element.width() * element.scaleX();
+  const height = element.height() * element.scaleY();
+  // Note: Assumes non-rotated rectangles. For rotated elements, this would require
+  // calculating the bounding box of the rotated shape's vertices.
+  const x = pos.x;
+  const y = pos.y;
+
+  return {
+    vertical: [
+      { value: x, orientation: 'V', snapPoints: [y, y + height] },           // Left
+      { value: x + width / 2, orientation: 'V', snapPoints: [y, y + height] }, // Center
+      { value: x + width, orientation: 'V', snapPoints: [y, y + height] },     // Right
+    ],
+    horizontal: [
+      { value: y, orientation: 'H', snapPoints: [x, x + width] },           // Top
+      { value: y + height / 2, orientation: 'H', snapPoints: [x, x + width] }, // Middle
+      { value: y + height, orientation: 'H', snapPoints: [x, x + width] },     // Bottom
+    ],
   };
+};
 
 /**
- * The main snapping engine.
- * It takes the snap lines of the element being dragged and a list of all possible
- * target lines (from other elements) and finds the best snap points.
- * @param draggedLines - The vertical and horizontal snap lines for the element being moved.
- * @param targetLines - All possible vertical and horizontal lines from static elements.
- * @returns An object with the best snapping guides found for vertical and horizontal orientations.
+ * Generates snap lines for the stage itself (edges and center).
+ * @param stage - The Konva Stage.
+ * @returns An object containing arrays of vertical and horizontal SnapLines for the stage.
  */
-export const getGuides = (
-    draggedLines: { vertical: SnapLine[], horizontal: SnapLine[] },
-    targetLines: { vertical: SnapLine[], horizontal: SnapLine[] }
-  ): { vertical: Guide[], horizontal: Guide[] } => {
-    const result: { vertical: Guide[], horizontal: Guide[] } = { vertical: [], horizontal: [] };
-    let minV = Infinity;
-    for (const dragged of draggedLines.vertical) {
-      for (const target of targetLines.vertical) {
-        const diff = Math.abs(dragged.value - target.value);
-        if (diff < minV) { minV = diff; }
+export const getStageSnapLines = (stage: Konva.Stage): { vertical: SnapLine[], horizontal: SnapLine[] } => {
+    const width = stage.width();
+    const height = stage.height();
+    return {
+        vertical: [
+            { value: 0, orientation: 'V', snapPoints: [0, height] },
+            { value: width / 2, orientation: 'V', snapPoints: [0, height] },
+            { value: width, orientation: 'V', snapPoints: [0, height] },
+        ],
+        horizontal: [
+            { value: 0, orientation: 'H', snapPoints: [0, width] },
+            { value: height / 2, orientation: 'H', snapPoints: [0, width] },
+            { value: height, orientation: 'H', snapPoints: [0, width] },
+        ]
+    };
+};
+
+
+/**
+ * The new, more accurate snapping engine.
+ * It finds the single best snap distance and then collects ALL guides that match
+ * that distance, merging them into one comprehensive guide line.
+ * @param draggedLines - The snap lines for the element being moved or transformed.
+ * @param targetLines - All possible static lines (from other elements and the stage).
+ * @returns An object with the best `Guide` found for vertical and horizontal orientations, or null.
+ */
+export const findBestSnapGuides = (
+  draggedLines: { vertical: SnapLine[], horizontal: SnapLine[] },
+  targetLines: { vertical: SnapLine[], horizontal: SnapLine[] }
+): { vertical: Guide | null, horizontal: Guide | null } => {
+  const result: { vertical: Guide | null, horizontal: Guide | null } = { vertical: null, horizontal: null };
+  const Epsilon = 0.5; // Use a small epsilon for floating point comparisons
+
+  // --- VERTICAL SNAPPING ---
+  // Pass 1: Find the minimum snap distance
+  let minVDist = SNAP_THRESHOLD;
+  draggedLines.vertical.forEach(dragged => {
+    targetLines.vertical.forEach(target => {
+      const diff = Math.abs(dragged.value - target.value);
+      if (diff < minVDist) {
+        minVDist = diff;
       }
-    }
-  
-    if (minV < SNAP_THRESHOLD) {
-      for (const dragged of draggedLines.vertical) {
-        for (const target of targetLines.vertical) {
-          const diff = Math.abs(dragged.value - target.value);
-          if (diff < SNAP_THRESHOLD) {
-              // Find the union of the two lines to draw the guide
-              const allPoints = [...target.snapPoints, ...dragged.snapPoints];
-              const minPoint = Math.min(...allPoints);
-              const maxPoint = Math.max(...allPoints);
-            result.vertical.push({
-              line: [target.value, minPoint, target.value, maxPoint],
+    });
+  });
+
+  // Pass 2: Collect all guides that match the minimum distance
+  if (minVDist < SNAP_THRESHOLD) {
+    let bestV: Guide | null = null;
+    const allSnapPoints: number[] = [];
+    
+    draggedLines.vertical.forEach(dragged => {
+      targetLines.vertical.forEach(target => {
+        const diff = Math.abs(dragged.value - target.value);
+        // If this pair matches the minimum distance (within a small tolerance)
+        if (Math.abs(diff - minVDist) < Epsilon) {
+          // If this is the first match, establish the guide's core properties
+          if (!bestV) {
+            bestV = {
               snap: target.value,
               offset: target.value - dragged.value,
               orientation: 'V',
-            });
+              line: [], // will be calculated last
+            };
           }
+          // Collect all points from both the target and dragged lines to calculate the guide's extent
+          allSnapPoints.push(...target.snapPoints, ...dragged.snapPoints);
         }
-      }
+      });
+    });
+
+    if (bestV) {
+        // Calculate the final guide line that spans all collected snap points
+        const minPoint = Math.min(...allSnapPoints);
+        const maxPoint = Math.max(...allSnapPoints);
+        bestV.line = [bestV.snap, minPoint, bestV.snap, maxPoint];
+        result.vertical = bestV;
     }
-  
-    let minH = Infinity;
-    for (const dragged of draggedLines.horizontal) {
-      for (const target of targetLines.horizontal) {
+  }
+
+
+  // --- HORIZONTAL SNAPPING ---
+  // Pass 1: Find the minimum snap distance
+  let minHDist = SNAP_THRESHOLD;
+  draggedLines.horizontal.forEach(dragged => {
+    targetLines.horizontal.forEach(target => {
+      const diff = Math.abs(dragged.value - target.value);
+      if (diff < minHDist) {
+        minHDist = diff;
+      }
+    });
+  });
+
+  // Pass 2: Collect all guides that match the minimum distance
+  if (minHDist < SNAP_THRESHOLD) {
+    let bestH: Guide | null = null;
+    const allSnapPoints: number[] = [];
+
+    draggedLines.horizontal.forEach(dragged => {
+      targetLines.horizontal.forEach(target => {
         const diff = Math.abs(dragged.value - target.value);
-        if (diff < minH) { minH = diff; }
-      }
-    }
-  
-    if (minH < SNAP_THRESHOLD) {
-      for (const dragged of draggedLines.horizontal) {
-        for (const target of targetLines.horizontal) {
-          const diff = Math.abs(dragged.value - target.value);
-          if (diff < SNAP_THRESHOLD) {
-              const allPoints = [...target.snapPoints, ...dragged.snapPoints];
-              const minPoint = Math.min(...allPoints);
-              const maxPoint = Math.max(...allPoints);
-            result.horizontal.push({
-              line: [minPoint, target.value, maxPoint, target.value],
+        if (Math.abs(diff - minHDist) < Epsilon) {
+          if (!bestH) {
+            bestH = {
               snap: target.value,
               offset: target.value - dragged.value,
               orientation: 'H',
-            });
+              line: [], // will be calculated last
+            };
           }
+          allSnapPoints.push(...target.snapPoints, ...dragged.snapPoints);
         }
-      }
+      });
+    });
+
+    if (bestH) {
+        const minPoint = Math.min(...allSnapPoints);
+        const maxPoint = Math.max(...allSnapPoints);
+        bestH.line = [minPoint, bestH.snap, maxPoint, bestH.snap];
+        result.horizontal = bestH;
     }
-    return result;
-  };
+  }
 
+  return result;
+};
 
-/**
- * Calculates the final snapped position of a node.
- * @param guides - The active horizontal and vertical guides.
- * @param node - The Konva node being dragged.
- * @returns The new x and y coordinates for the node.
- */
-export const getSnappedPosition = (guides: Guide[], node: Konva.Node): { x: number, y: number } => {
-    let x = node.x();
-    let y = node.y();
+// ... keep applyTransformSnap as it was in the previous answer. It's correct.
+export const applyTransformSnap = (node: Konva.Node, tr: Transformer, bestSnaps: { vertical: Guide | null, horizontal: Guide | null }, stageScale: number) => {
+    const anchor = tr.getActiveAnchor();
+    if (!anchor) return;
+    
+    const { vertical: vSnap, horizontal: hSnap } = bestSnaps;
 
-    const verticalGuide = guides.find(g => g.orientation === 'V');
-    if (verticalGuide) {
-        x += verticalGuide.offset;
+    const localVOffset = vSnap ? vSnap.offset / stageScale : 0;
+    const localHOffset = hSnap ? hSnap.offset / stageScale : 0;
+
+    if (vSnap) {
+        if (anchor.includes('left')) {
+            const currentLocalX = node.x();
+            const newLocalX = currentLocalX + localVOffset;
+            const deltaX = currentLocalX - newLocalX;
+            node.x(newLocalX);
+            node.width(node.width() + deltaX);
+        } else if (anchor.includes('right')) {
+            node.width(node.width() + localVOffset);
+        } else {
+            node.x(node.x() + localVOffset);
+        }
     }
 
-    const horizontalGuide = guides.find(g => g.orientation === 'H');
-    if (horizontalGuide) {
-        y += horizontalGuide.offset;
+    if (hSnap) {
+        if (anchor.includes('top')) {
+            const currentLocalY = node.y();
+            const newLocalY = currentLocalY + localHOffset;
+            const deltaY = currentLocalY - newLocalY;
+            node.y(newLocalY);
+            node.height(node.height() + deltaY);
+        } else if (anchor.includes('bottom')) {
+            node.height(node.height() + localHOffset);
+        } else {
+            node.y(node.y() + localHOffset);
+        }
     }
-
-    return { x, y };
 };
