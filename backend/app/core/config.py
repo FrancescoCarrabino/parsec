@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     AZURE_API_BASE_DALLE: str
     AZURE_API_VERSION_DALLE: str
 
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minio"
+    MINIO_SECRET_KEY: str = "minio123"
+    MINIO_BUCKET_NAME: str = "parsec-assets"
+    MINIO_USE_SECURE: bool = False
+    MINIO_PUBLIC_ENDPOINT: str = "http://localhost:9000"
+
     # --- Logging Settings ---
     LOG_LEVEL: str = "INFO"
     LOG_AS_JSON: bool = False

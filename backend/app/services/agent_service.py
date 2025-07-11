@@ -12,7 +12,12 @@ from ..agents.canvas_agent import CanvasAgent
 from ..agents.image_genius import ImageGenius
 from ..agents.layout_maestro import LayoutMaestro
 from ..agents.slide_designer import SlideDesigner
+from ..agents.component_crafter import ComponentCrafter
+from ..agents.frontend_architect import FrontendArchitect
+from ..agents.data_analyst_agent import DataAnalystAgent
+
 from .workspace_service import WorkspaceService
+from .storage_service import StorageService
 
 async def _do_nothing_sender(status: str, message: str, details: Dict = None):
     pass
@@ -21,39 +26,58 @@ class AgentService:
     def __init__(self, workspace_service: WorkspaceService):
         logger.info("Assembling Agentic System...")
         self.workspace_service = workspace_service
+        storage_service = StorageService()
         self.agent_registry = AgentRegistry()
         list_of_agents_to_register = [
+            DataAnalystAgent(workspace_service=self.workspace_service, storage_service=storage_service),
             WebContentFetcher(), ContentCrafter(),
             CanvasAgent(workspace_service=self.workspace_service),
             ImageGenius(),
             LayoutMaestro(workspace_service=self.workspace_service),
             SlideDesigner(workspace_service=self.workspace_service),
+            ComponentCrafter(workspace_service=self.workspace_service),
+            FrontendArchitect(workspace_service=self.workspace_service),
         ]
         for agent in list_of_agents_to_register:
             self.agent_registry.register_agent(agent)
         self.orchestrator = OrchestratorAgent(self.agent_registry)
         logger.success("Agentic System Assembled.")
 
-    async def _invoke_agent_as_tool(self, agent_name: str, objective: str, context: Dict[str, Any], send_status_update: Callable) -> Any:
+    # --- MODIFIED: _invoke_agent_as_tool now explicitly accepts send_status_update ---
+    async def _invoke_agent_as_tool(
+        self,
+        agent_name: str,
+        objective: str,
+        context: Dict[str, Any],
+        # THIS IS THE CRITICAL CHANGE IN ITS SIGNATURE
+        # It's no longer just 'send_status_update', but it's passed here.
+        # This parameter represents the sender callable available at this specific invocation depth.
+        propagated_send_status_update: Callable
+    ) -> Any:
         logger.info(f"--- Sub-Task Invocation: Agent '{agent_name}' called with objective: '{objective}' ---")
         agent_to_invoke = self.agent_registry.get_agent(agent_name)
         if not agent_to_invoke:
             error_msg = f"Attempted to invoke non-existent agent: {agent_name}"
             logger.error(error_msg)
             return {"error": error_msg}
+
+        # Recursively call the agent's run_task.
+        # It needs to provide a new 'invoke_agent' callable for the next level down.
+        # This new callable must also correctly propagate 'propagated_send_status_update'.
+        next_level_invoker = lambda an, obj, ctx: self._invoke_agent_as_tool(an, obj, ctx, propagated_send_status_update)
+
         return await agent_to_invoke.run_task(
             objective=objective,
             context=context,
-            invoke_agent=self._invoke_agent_as_tool,
-            send_status_update=send_status_update
+            invoke_agent=next_level_invoker, # Pass the correctly curried invoker
+            send_status_update=propagated_send_status_update # Pass the sender directly to run_task
         )
 
-    # --- REPLACED with the robust try...finally version ---
     async def process_user_prompt(
         self,
         prompt_text: str,
         selected_ids: List[str],
-        send_status_update: Callable = _do_nothing_sender
+        send_status_update: Callable = _do_nothing_sender # This is the main sender from websocket.py
     ) -> List[Dict[str, Any]]:
         
         workflow_failed = False
@@ -65,14 +89,11 @@ class AgentService:
         try:
             await send_status_update("STARTED", "Workflow started...")
             
-            # Pass the sender to the orchestrator
             plan = await self.orchestrator.create_plan(
                 prompt_text, selected_ids, send_status_update=send_status_update
             )
             
             if not plan.tasks:
-                logger.warning("Orchestrator did not create any tasks. Ending workflow.")
-                # We can consider this a "failed" state for clarity
                 workflow_failed = True
                 await send_status_update("FAILED", "I couldn't create a plan for that request.")
                 return []
@@ -90,12 +111,15 @@ class AgentService:
                     await send_status_update("ERROR", f"Could not find a required specialist: {agent_name}")
                     break
 
-                # The lambda here is crucial for passing the sender down during agent-to-agent calls
+                # --- THIS IS THE CRITICAL CHANGE IN THE LAMBDA ---
+                # It must pass send_status_update into _invoke_agent_as_tool correctly.
+                invoker_for_specialist = lambda an, obj, ctx: self._invoke_agent_as_tool(an, obj, ctx, send_status_update)
+
                 task_result = await specialist.run_task(
                     objective=objective,
                     context=workflow_context,
-                    invoke_agent=lambda an, obj, ctx: self._invoke_agent_as_tool(an, obj, ctx, send_status_update),
-                    send_status_update=send_status_update
+                    invoke_agent=invoker_for_specialist, # Pass this correctly formed invoker
+                    send_status_update=send_status_update # This passes the *current* send_status_update to the specialist's run_task method.
                 )
 
                 workflow_context["history"].append({"task": objective, "agent": agent_name, "result": task_result})
@@ -114,15 +138,12 @@ class AgentService:
         
         finally:
             if not workflow_failed:
-                # On success, send the final COMPLETED status
                 await send_status_update("COMPLETED", "All done! Applying changes.")
                 logger.info(f"Workflow finished successfully. Collected {len(workflow_context['commands'])} commands.")
                 if workflow_context["commands"]:
                     self.workspace_service._commit_history()
             else:
-                # On failure, send a clear FAILED status
                 logger.warning("Workflow finished with errors. No changes will be committed.")
-                # The specific error was already sent, this is just a final confirmation.
                 await send_status_update("FAILED", "Workflow aborted due to an error.")
 
         return [] if workflow_failed else workflow_context.get("commands", [])

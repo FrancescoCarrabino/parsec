@@ -119,6 +119,14 @@ class ImageElement(Element):
     width: float = 1024
     height: float = 1024
 
+class Asset(BaseModel):
+    """Represents a file asset stored in object storage."""
+    id: str = Field(default_factory=lambda: generate_id("asset"))
+    name: str  # The original filename, e.g., "logo.png"
+    asset_type: Literal['image', 'pdf', 'spreadsheet', 'csv', 'text', 'presentation', 'markdown', 'other']
+    mime_type: str  # The actual file MIME type, e.g., "image/png"
+    url: str # The permanent URL of the file in MinIO/S3
+
 # --- NEW COMPONENT-RELATED MODELS ---
 
 class ComponentProperty(BaseModel):

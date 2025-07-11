@@ -3,9 +3,11 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import litellm
 from loguru import logger
+from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import settings
 from .api.v1 import websocket
+from .api.v1 import assets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,8 +45,20 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Application shutdown.")
 
-# The rest of main.py remains the same...
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins="*",
+    allow_credentials=True, # Allows cookies to be included in requests
+    allow_methods=["*"],    # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],    # Allows all headers
+)
+
+
 app.include_router(websocket.router, prefix="/api/v1")
+app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
+
 @app.get("/")
 async def root(): return {"message": "Parsec is running."}

@@ -1,0 +1,22 @@
+# Use a slim, modern Python base image
+FROM python:3.11-slim
+
+# Set a working directory inside the container
+WORKDIR /app
+
+# Install essential data science and kernel gateway packages
+# We are installing these here so they are pre-baked into the image for fast startup.
+RUN pip install --no-cache-dir \
+    jupyter-kernel-gateway==2.6.0 \
+    pandas==2.2.2 \
+    openpyxl==3.1.2 \
+    matplotlib==3.8.4 \
+    scikit-learn==1.5.0
+
+# The kernel gateway will run on this port inside the container's network.
+EXPOSE 8888
+
+# The command to start the server when the container runs.
+# --KernelGatewayApp.ip=0.0.0.0 is CRITICAL to allow connections from other containers.
+# --KernelGatewayApp.allow_origin='*' is for development; in production, you'd lock this down.
+CMD ["jupyter-kernel-gateway", "--KernelGatewayApp.ip=0.0.0.0", "--KernelGatewayApp.port=8888", "--KernelGatewayApp.allow_origin='*'"]

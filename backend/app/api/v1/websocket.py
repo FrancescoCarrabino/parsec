@@ -10,6 +10,8 @@ from loguru import logger
 from ...services.workspace_service import WorkspaceService
 from ...services.agent_service import AgentService
 
+from .dependencies import get_workspace_service, get_agent_service
+
 router = APIRouter()
 
 class ConnectionManager:
@@ -25,19 +27,6 @@ class ConnectionManager:
             if isinstance(res, Exception): logger.warning(f"Failed to send message to a client: {res}")
 
 manager = ConnectionManager()
-
-# --- NEW, SIMPLIFIED DEPENDENCY INJECTION ---
-# Create a single instance of WorkspaceService
-_workspace_service = WorkspaceService()
-# Create a single instance of AgentService, giving it the WorkspaceService
-_agent_service = AgentService(workspace_service=_workspace_service)
-
-def get_workspace_service() -> WorkspaceService:
-    return _workspace_service
-
-def get_agent_service() -> AgentService:
-    return _agent_service
-# --- END OF NEW SETUP ---
 
 
 @router.websocket("/ws")
@@ -65,7 +54,8 @@ async def websocket_endpoint(
             "type": "SET_WORKSPACE_STATE",
             "payload": {
                 "elements": workspace.get_all_elements(),
-                "componentDefinitions": workspace.get_all_component_definitions()
+                "componentDefinitions": workspace.get_all_component_definitions(),
+                "assets": workspace.get_all_assets()
             }
         }
         await websocket.send_text(json.dumps(initial_state))

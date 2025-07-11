@@ -60,7 +60,21 @@ class OrchestratorAgent:
 
         # --- Refined Few-Shot Examples ---
         few_shot_examples = """
-        **EXAMPLE 1: Creating a Standalone Element**
+        **EXAMPLE 1: A Full UI Layout Request**
+        User Request: "create a frontend dashboard that is useful for brokers"
+        User Selection Context: No elements selected.
+        JSON Plan:
+        {
+        "tasks": [
+            {
+            "agent_name": "FrontendArchitect",
+            "objective": "Design and build a complete dashboard UI for financial brokers. It should include placeholders for a main stock chart, a list of recent trades, and a portfolio summary.",
+            "reasoning": "The user is asking for a complex, multi-element UI layout, not just a single component or a slide. The FrontendArchitect is the specialist project manager for this kind of large-scale design task. I will give it a high-level brief and let it orchestrate the other agents to build the pieces."
+            }
+        ]
+        }
+
+        **EXAMPLE 2: Creating a Standalone Element**
         User Request: "Create an image of a dog."
         User Selection Context: No elements selected.
         JSON Plan:
@@ -74,7 +88,7 @@ class OrchestratorAgent:
         ]
         }
 
-        **EXAMPLE 2: Creating an Element within a Slide (Situational)**
+        **EXAMPLE 3: Creating an Element within a Slide (Situational)**
         User Request: "Create a new slide with an image of a cat."
         User Selection Context: No elements selected.
         JSON Plan:
@@ -88,7 +102,7 @@ class OrchestratorAgent:
         ]
         }
 
-        **EXAMPLE 3: Full Presentation Creation**
+        **EXAMPLE 4: Full Presentation Creation**
         User Request: "Make a 2-slide presentation about space exploration."
         User Selection Context: No elements selected.
         JSON Plan:
@@ -107,7 +121,7 @@ class OrchestratorAgent:
         ]
         }
 
-        **EXAMPLE 4: Modifying an Existing Element**
+        **EXAMPLE 5: Modifying an Existing Element**
         User Request: "Make this text blue."
         User Selection Context: Selected elements: ["text_123"]
         JSON Plan:
@@ -120,19 +134,35 @@ class OrchestratorAgent:
             }
         ]
         }
+        **EXAMPLE 6: Data Analysis Request**
+        User Request: "Can you create a bar chart of sales by region from my uploaded sales_report.xlsx?"
+        User Selection Context: Selected elements: ["asset_id_for_sales_report.xlsx"]
+        JSON Plan:
+        {
+        "tasks": [
+            {
+            "agent_name": "DataAnalystAgent",
+            "objective": "Analyze the provided spreadsheet to create a bar chart of sales by region.",
+            "reasoning": "The user is asking to analyze a spreadsheet and create a chart. This is the specific purpose of the DataAnalystAgent. It will handle the interactive session and data processing."
+            }
+        ]
+        }
         """
 
         # --- REWRITTEN SYSTEM PROMPT ---
         system_prompt = f"""
-        You are an AI Master Planner (a CEO). Your goal is to analyze a user's request and delegate it to the most appropriate specialist agent by creating a high-level strategic plan.
+        You are an AI Master Planner (a CEO). Your goal is to analyze a user's request and delegate the entire project to the single most appropriate "Project Manager" agent.
 
         **CRITICAL INSTRUCTIONS:**
-        1.  **Analyze Intent:** Carefully read the user's request. Pay close attention to keywords.
-            *   If the user mentions **"slide"**, **"presentation"**, or **"deck"**, the task should be assigned to the `SlideDesigner`.
-            *   If the user asks to create a single item (e.g., "an image", "a text box") without mentioning a slide, the task should be assigned to the `CanvasAgent`.
-            *   If the user asks to modify an existing element (e.g., "make this bigger", "change the color"), the task should be assigned to the `CanvasAgent`.
-        2.  **Delegate, Don't Micromanage:** Formulate a high-level `objective` that tells the chosen agent WHAT to do, not HOW to do it. Trust your specialists.
-        3.  **Output Format:** ALWAYS output a JSON object with a single "tasks" key.
+        1.  **Identify Project Type:** Analyze the user's request to determine the overall goal.
+            - If the request involves **analyzing a spreadsheet, CSV, or data to create charts or tables**: Delegate to `DataAnalystAgent`.
+            - If the request is for a **UI, app screen, dashboard, or website layout**: Delegate to `FrontendArchitect`.
+            - If the request is for a **presentation, slide deck, or slides**: Delegate to `SlideDesigner`.
+            - If the request is a simple, one-shot action (e.g., "create a blue rectangle", "make this text bold"): Delegate to `CanvasAgent`.
+        2.  **Formulate a High-Level Brief:** Your `objective` should be a single, comprehensive design brief for the chosen project manager.
+        3.  **Single Task Only:** Your plan should almost always contain only ONE task that delegates the entire project. Do not break it down yourself. Let the specialist manage their own project.
+        4.  **Delegate, Don't Micromanage:** Formulate a high-level `objective` that tells the chosen agent WHAT to do, not HOW to do it. Trust your specialists.
+        5.  **Output Format:** ALWAYS output a JSON object with a single "tasks" key.
 
         **AVAILABLE AGENTS:**
         ---

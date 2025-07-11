@@ -1,10 +1,10 @@
 # backend/app/services/workspace_service.py
 import copy
-from typing import Dict, Union, List, Optional, Tuple
+from typing import Dict, Union, List, Optional, Tuple, Any
 from loguru import logger
 from ..models.elements import (
     Element, AnyElement, ShapeElement, GroupElement, TextElement, FrameElement,
-    PathElement, ImageElement, ComponentDefinition, ComponentInstanceElement, ComponentProperty
+    PathElement, ImageElement, ComponentDefinition, ComponentInstanceElement, ComponentProperty, Asset
 )
 
 class WorkspaceService:
@@ -12,6 +12,7 @@ class WorkspaceService:
         # CORE STATE
         self.elements: Dict[str, AnyElement] = {}
         self.component_definitions: Dict[str, ComponentDefinition] = {}
+        self.assets: Dict[str, Asset] = {}
         self._next_z_index = 1
         
         # --- HISTORY MANAGEMENT STATE ---
@@ -59,6 +60,38 @@ class WorkspaceService:
             logger.info(f"Redo successful. Restored history state at index {self.history_index}.")
             return self.elements
         logger.warning("Redo failed: No future history state available.")
+        return None
+
+    # ===================================================================
+    # NEW: ASSET MANAGEMENT METHODS
+    # ===================================================================
+    
+    def create_asset(self, asset_data: Dict) -> Optional[Asset]:
+        """Creates an asset metadata record."""
+        try:
+            asset = Asset(**asset_data)
+            self.assets[asset.id] = asset
+            logger.info(f"Asset metadata created for '{asset.name}' (ID: {asset.id})")
+            return asset
+        except Exception as e:
+            logger.error(f"Failed to create asset metadata: {e}")
+            return None
+
+    def get_all_assets(self) -> List[Dict]:
+        """Returns all asset metadata records."""
+        return [asset.model_dump() for asset in self.assets.values()]
+
+    def get_asset_by_id(self, asset_id: str) -> Optional[Asset]:
+        """Retrieves a single asset by its ID."""
+        return self.assets.get(asset_id)
+
+    def delete_asset(self, asset_id: str) -> Optional[Asset]:
+        """Deletes an asset metadata record and returns it."""
+        if asset_id in self.assets:
+            deleted_asset = self.assets.pop(asset_id)
+            logger.info(f"Asset metadata deleted for ID: {asset_id}")
+            return deleted_asset
+        logger.warning(f"Attempted to delete non-existent asset metadata with ID: {asset_id}")
         return None
 
     # ===================================================================
@@ -382,3 +415,71 @@ class WorkspaceService:
             return element.content
         logger.warning(f"Element {element_id} is not a TextElement or does not exist.")
         return None
+
+    def create_component_from_elements(
+        self,
+        name: str,
+        source_element_ids: List[str],
+        schema: List[Dict[str, Any]]
+    ) -> Tuple[Optional[ComponentDefinition], Optional[ComponentInstanceElement], List[str]]:
+        """
+        Creates a component definition and an instance from a set of source elements.
+        This is a transactional operation.
+        Returns (new_definition, new_instance, deleted_ids).
+        """
+        source_elements = [self.elements.get(eid) for eid in source_element_ids if self.elements.get(eid)]
+        if not source_elements:
+            logger.error("Component creation failed: No valid source elements found.")
+            return None, None, []
+
+        # 1. Calculate the bounding box of the source elements.
+        # This will become the frame for the new component instance.
+        min_x = min(el.x for el in source_elements)
+        min_y = min(el.y for el in source_elements)
+        max_x = max(el.x + el.width for el in source_elements)
+        max_y = max(el.y + el.height for el in source_elements)
+        comp_x, comp_y = min_x, min_y
+        comp_width, comp_height = max_x - min_x, max_y - min_y
+
+        # 2. Create the template with element positions relative to the new component's origin.
+        template_elements_data = []
+        for el in source_elements:
+            el_copy = el.model_copy()
+            el_copy.x -= comp_x
+            el_copy.y -= comp_y
+            template_elements_data.append(el_copy.model_dump())
+
+        # 3. Create and register the ComponentDefinition (the "blueprint").
+        try:
+            parsed_schema = [ComponentProperty(**s) for s in schema]
+            new_definition = ComponentDefinition(
+                name=name,
+                template_elements=template_elements_data,
+                schema=parsed_schema
+            )
+            self.component_definitions[new_definition.id] = new_definition
+        except Exception as e:
+            logger.exception(f"Failed to create component definition: {e}")
+            return None, None, []
+
+        # 4. Create the first ComponentInstanceElement on the canvas.
+        instance_payload = {
+            "element_type": "component_instance",
+            "definition_id": new_definition.id,
+            "x": comp_x, "y": comp_y,
+            "width": comp_width, "height": comp_height,
+            "properties": {}, # Properties can be populated later
+        }
+        new_instance = self.create_element_from_payload(instance_payload)
+        if not new_instance:
+            # Rollback if instance creation fails
+            del self.component_definitions[new_definition.id]
+            return None, None, []
+
+        # 5. Delete the original source elements.
+        deleted_ids = []
+        for an_id in source_element_ids:
+            deleted_ids.extend(self._delete_element_internal(an_id))
+
+        logger.success(f"Successfully created component '{name}' and deleted {len(deleted_ids)} source elements.")
+        return new_definition, new_instance, deleted_ids
