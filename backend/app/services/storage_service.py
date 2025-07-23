@@ -134,12 +134,25 @@ class StorageService:
             )
             logger.info(f"Successfully uploaded '{file_path}' as '{object_name}'.")
 
-            # The only responsibility of this function is to return upload details
-            file_url = f"{settings.MINIO_ENDPOINT}/{settings.MINIO_BUCKET_NAME}/{object_name}"
-            
+            # Generate a presigned URL for the uploaded file
+            presigned_url = self.client.presigned_get_object(
+                self.bucket_name,
+                object_name,
+                expires=timedelta(days=7),  # The URL is valid for 7 days
+            )
+
+            # Replace the internal endpoint with the public one
+            internal_base_url = f"http://{settings.MINIO_ENDPOINT}"
+            if settings.MINIO_USE_SECURE:
+                internal_base_url = f"https://{settings.MINIO_ENDPOINT}"
+
+            public_url = presigned_url.replace(
+                internal_base_url, settings.MINIO_PUBLIC_ENDPOINT
+            )
+
             return {
                 "name": object_name,
-                "url": file_url
+                "url": public_url
             }
         except Exception as e:
             logger.exception(f"Failed to upload file '{file_path}': {e}")

@@ -50,9 +50,12 @@ async def websocket_endpoint(
     logger.info(f"Client connected: {client_host}:{client_port}")
 
     # --- This `send_status_update` closure is the key communicator ---
-    async def send_update_to_client(message_to_send: dict):
+    async def send_update_to_client(status, message, details=None):
         """A closure that captures the current websocket to send messages."""
-        await websocket.send_text(json.dumps(message_to_send))
+        payload = {"type": status, "payload": {"message": message}}
+        if details is not None:
+            payload["payload"].update(details)
+        await websocket.send_text(json.dumps(payload))
 
     try:
         # Send initial state
