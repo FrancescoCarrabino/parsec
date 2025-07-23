@@ -101,7 +101,7 @@ class AgentService:
         }
 
         try:
-            await send_update_to_client("STARTED", "Workflow started...")
+            await send_update_to_client("AGENT_STATUS_UPDATE", "Workflow started...", {"status": "STARTED"})
 
             plan = await self.orchestrator.create_plan(
                 prompt_text, selected_ids, send_status_update=send_update_to_client
@@ -115,7 +115,9 @@ class AgentService:
                 return []
 
             await send_update_to_client(
-                "PLAN_CREATED", f"Plan ready with {len(plan.tasks)} step(s). Let's go!"
+                "AGENT_STATUS_UPDATE",
+                f"Plan ready with {len(plan.tasks)} step(s). Let's go!",
+                {"status": "PLAN_CREATED"}
             )
 
             for i, task in enumerate(plan.tasks):
@@ -124,9 +126,10 @@ class AgentService:
                     f"Step {i+1}/{len(plan.tasks)}: Asking the {agent_name} to work..."
                 )
                 await send_update_to_client(
-                    "EXECUTING_TASK",
+                    "AGENT_STATUS_UPDATE",
                     status_message,
                     {
+                        "status": "EXECUTING_TASK",
                         "task_number": i + 1,
                         "total_tasks": len(plan.tasks),
                         "agent_name": agent_name,
@@ -145,7 +148,7 @@ class AgentService:
                 # It must pass send_status_update into _invoke_agent_as_tool correctly.
                 invoker_for_specialist = (
                     lambda an, obj, ctx: self._invoke_agent_as_tool(
-                        an, obj, ctx, send_status_update
+                        an, obj, ctx, send_update_to_client
                     )
                 )
 
@@ -166,7 +169,7 @@ class AgentService:
                 ):
                     error_msg = task_result.get("error", "An agent reported a failure.")
                     logger.error(f"Task {i+1} failed: {error_msg}. Stopping workflow.")
-                    await send_update_to_client("ERROR", f"Step {i+1} failed: {error_msg}")
+                    await send_update_to_client("AGENT_STATUS_UPDATE", f"Step {i+1} failed: {error_msg}", {"status": "ERROR"})
                     workflow_failed = True
                     break
 
@@ -177,7 +180,7 @@ class AgentService:
 
         finally:
             if not workflow_failed:
-                await send_update_to_client("COMPLETED", "All done! Applying changes.")
+                await send_update_to_client("AGENT_STATUS_UPDATE", "All done! Applying changes.", {"status": "COMPLETED"})
                 logger.info(
                     f"Workflow finished successfully. Collected {len(workflow_context['commands'])} commands."
                 )
@@ -187,7 +190,7 @@ class AgentService:
                 logger.warning(
                     "Workflow finished with errors. No changes will be committed."
                 )
-                await send_update_to_client("FAILED", "Workflow aborted due to an error.")
+                await send_update_to_client("AGENT_STATUS_UPDATE", "Workflow aborted due to an error.", {"status": "FAILED"})
 
         return [] if workflow_failed else workflow_context.get("commands", [])
 

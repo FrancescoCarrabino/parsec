@@ -70,7 +70,7 @@ class FrontendArchitect(Agent):
     ) -> Dict[str, Any]:
         logger.info(f"Agent '{self.name}' activated with objective: '{objective}'")
         try:
-            await send_status_update("PREPARING", "Preparing the design canvas...")
+            await send_status_update("AGENT_STATUS_UPDATE", "Preparing the design canvas...", {"status": "PREPARING"})
             frame_id = f"canvas_{uuid.uuid4().hex[:8]}"
             main_canvas_frame = {
                 "id": frame_id,
@@ -85,7 +85,9 @@ class FrontendArchitect(Agent):
             }
 
             await send_status_update(
-                "THINKING", "Step 1/2: Architecting main container panels..."
+                "AGENT_STATUS_UPDATE",
+                "Step 1/2: Architecting main container panels...",
+                {"status": "THINKING"}
             )
             theme = await self._decide_on_theme(objective)
             main_canvas_frame["fill"]["color"] = theme.get("backgroundColor", "#F0F2F5")
@@ -97,14 +99,17 @@ class FrontendArchitect(Agent):
                 raise ValueError("Architect step failed to produce container shapes.")
 
             await send_status_update(
-                "THINKING", "Step 2/2: Designing content for each container..."
+                "AGENT_STATUS_UPDATE",
+                "Step 2/2: Designing content for each container...",
+                {"status": "THINKING"}
             )
 
             specialist_tasks = []
             for i, container in enumerate(container_shapes):
                 await send_status_update(
-                    "THINKING",
+                    "AGENT_STATUS_UPDATE",
                     f"Step 2.{i+1}/{len(container_shapes)}: Designing inside the '{container['name']}'...",
+                    {"status": "THINKING"}
                 )
                 specialist_tasks.append(
                     self._run_interior_designer(container, theme, frame_id)
@@ -132,7 +137,7 @@ class FrontendArchitect(Agent):
                     "The Interior Designer step produced no child elements overall."
                 )
 
-            await send_status_update("PLANNING", "Assembling final build plan...")
+            await send_status_update("AGENT_STATUS_UPDATE", "Assembling final build plan...", {"status": "PLANNING"})
             final_elements_list = (
                 [main_canvas_frame] + container_shapes + all_child_elements
             )
@@ -140,13 +145,18 @@ class FrontendArchitect(Agent):
             build_plan = self._translate_elements_to_build_plan(final_elements_list)
 
             await send_status_update(
-                "PLAN_CREATED",
+                "AGENT_STATUS_UPDATE",
                 f"Final plan ready with {len(build_plan)} steps. Building UI...",
+                {"status": "PLAN_CREATED"}
             )
             for i, task in enumerate(build_plan):
                 tool_name, params = task.get("tool_name"), task.get("params", {})
                 status_msg = f"Step {i+1}/{len(build_plan)}: Building the {params.get('name', task.get('id'))}..."
-                await send_status_update("EXECUTING_TASK", status_msg)
+                await send_status_update(
+                    "AGENT_STATUS_UPDATE",
+                    status_msg,
+                    {"status": "EXECUTING_TASK"}
+                )
                 builder_method = self._execution_methods.get(tool_name)
                 if builder_method:
                     await builder_method(context=context, **params)

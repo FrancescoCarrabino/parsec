@@ -52,9 +52,22 @@ async def websocket_endpoint(
     # --- This `send_status_update` closure is the key communicator ---
     async def send_update_to_client(status, message, details=None):
         """A closure that captures the current websocket to send messages."""
-        payload = {"type": status, "payload": {"message": message}}
-        if details is not None:
-            payload["payload"].update(details)
+        if status in [
+            "STARTED", "PLANNING", "PLAN_CREATED", "EXECUTING_TASK", "INVOKING_AGENT", "INVOKING_TOOL", "COMPLETED", "FAILED", "ERROR"
+        ]:
+            payload = {
+                "type": "AGENT_STATUS_UPDATE",
+                "payload": {
+                    "status": status,
+                    "message": message,
+                },
+            }
+            if details is not None:
+                payload["payload"]["details"] = details
+        else:
+            payload = {"type": status, "payload": {"message": message}}
+            if details is not None:
+                payload["payload"].update(details)
         await websocket.send_text(json.dumps(payload))
 
     try:

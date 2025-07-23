@@ -411,9 +411,9 @@ class CanvasAgent(Agent):
                 3
             ):  # Limit to 3 steps to prevent infinite loops (e.g., invoke -> create -> finish)
                 await send_status_update(
-                    "THINKING",
+                    "AGENT_STATUS_UPDATE",
                     f"CanvasAgent thinking (step {i+1})...",
-                    {"agent_name": self.name},
+                    {"status": "THINKING", "agent_name": self.name},
                 )
                 response = await litellm.acompletion(
                     model=settings.LITELLM_TEXT_MODEL,
@@ -440,9 +440,9 @@ class CanvasAgent(Agent):
                     tool_args = json.loads(tool_call.function.arguments)
 
                     await send_status_update(
-                        "INVOKING_TOOL",
+                        "AGENT_STATUS_UPDATE",
                         f"CanvasAgent using tool: {tool_name}...",
-                        {"target_tool": tool_name},
+                        {"status": "INVOKING_TOOL", "target_tool": tool_name},
                     )
                     logger.info(
                         f"CanvasAgent is calling tool '{tool_name}' with args: {tool_args}"

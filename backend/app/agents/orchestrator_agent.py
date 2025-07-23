@@ -194,7 +194,7 @@ class OrchestratorAgent:
         messages = [{"role": "system", "content": system_prompt}]
 
         try:
-            await send_status_update("PLANNING", "Formulating a high-level plan...")
+            await send_status_update("AGENT_STATUS_UPDATE", "Formulating a high-level plan...", {"status": "PLANNING"})
             logger.debug(
                 f"Sending prompt to LLM:\n{system_prompt}"
             )  # Log the full prompt for debugging

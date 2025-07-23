@@ -144,9 +144,9 @@ class ComponentCrafter(Agent):
             # Use the standard tool-calling loop. It will handle the multi-step reasoning.
             for _ in range(3):  # Limit to 3 steps: inspect -> define -> finish
                 await send_status_update(
-                    "THINKING",
+                    "AGENT_STATUS_UPDATE",
                     "Analyzing selected elements...",
-                    {"agent_name": self.name},
+                    {"status": "THINKING", "agent_name": self.name},
                 )
                 response = await litellm.acompletion(
                     model=settings.LITELLM_TEXT_MODEL,
@@ -166,9 +166,9 @@ class ComponentCrafter(Agent):
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     await send_status_update(
-                        "INVOKING_TOOL",
+                        "AGENT_STATUS_UPDATE",
                         f"Using tool: {tool_name}...",
-                        {"target_tool": tool_name},
+                        {"status": "INVOKING_TOOL", "target_tool": tool_name},
                     )
                     tool_function = self.available_functions.get(tool_name)
                     tool_result = await tool_function(context=context, **tool_args)

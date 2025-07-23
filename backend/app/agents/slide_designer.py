@@ -203,9 +203,9 @@ class SlideDesigner(Agent):
                         agent_to_call = tool_args.get("agent_name")
                         agent_objective = tool_args.get("objective")
                         await send_status_update(
-                            "INVOKING_AGENT",
+                            "AGENT_STATUS_UPDATE",
                             f"Asking the {agent_to_call} for help...",
-                            {"target_agent": agent_to_call},
+                            {"status": "INVOKING_AGENT", "target_agent": agent_to_call},
                         )
                         tool_result = await invoke_agent(
                             agent_to_call, agent_objective, context
@@ -215,9 +215,9 @@ class SlideDesigner(Agent):
                         tool_function = self.available_functions.get(tool_name)
                         # We pass the context so tools can append commands directly
                         await send_status_update(
-                            "INVOKING_TOOL",
+                            "AGENT_STATUS_UPDATE",
                             f"Using the tool {tool_name}...",
-                            {"target_tool": tool_name},
+                            {"status": "INVOKING_TOOL", "target_tool": tool_name},
                         )
                         tool_result = await tool_function(context=context, **tool_args)
 
