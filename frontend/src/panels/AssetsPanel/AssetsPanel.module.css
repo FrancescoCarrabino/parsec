@@ -1,0 +1,160 @@
+/*
+  src/panels/AssetsPanel/AssetsPanel.module.css
+
+  This stylesheet assumes the following CSS variables are defined in a global scope 
+  (e.g., in your main index.css or App.css):
+  
+  --bg-surface: The background color for panels.
+  --bg-base: A slightly darker background for recessed elements.
+  --border-subtle: The color for dividing lines.
+  --text-primary: The primary text color (e.g., light gray).
+  --text-secondary: A more muted text color for labels.
+  --accent-color: The main brand/interactive color (e.g., blue, purple).
+*/
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    padding: 12px; /* A little more breathing room */
+    gap: 12px; /* Space between header, button, and grid */
+    border-top: 1px solid var(--border-subtle);
+    background-color: var(--bg-surface);
+  }
+  
+  .header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #a0a0a0); /* Use variable with fallback */
+    text-transform: uppercase;
+    padding: 0 4px; /* Slight indent */
+  }
+  
+  .uploadButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background-color: rgba(255, 255, 255, 0.05); /* Subtle background */
+    color: var(--text-primary, #e0e0e0);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px; /* Slightly more rounded */
+    cursor: pointer;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  
+  .uploadButton:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-color, #6a7eff); /* Highlight with accent color on hover */
+  }
+  
+  .assetGrid {
+    display: grid;
+    /* Creates responsive columns that are at least 72px wide */
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+    max-height: 250px; /* Limit height to prevent pushing other panels */
+    overflow-y: auto;
+    padding-right: 4px; /* Space for the scrollbar */
+  }
+  
+  /* --- Dark Theme Scrollbar Styling --- */
+  .assetGrid::-webkit-scrollbar {
+    width: 8px;
+  }
+  .assetGrid::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .assetGrid::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+  .assetGrid::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+  }
+  
+  .noAssets {
+    font-size: 12px;
+    color: var(--text-secondary, #808080);
+    text-align: center;
+    padding: 24px 8px;
+    background-color: var(--bg-base, #202225); /* Use a darker, recessed background */
+    border-radius: 4px;
+  }
+  
+  /* --- Asset Item Styling (The draggable item itself) --- */
+  .assetItem {
+    position: relative;
+    cursor: grab;
+    border-radius: 4px;
+    overflow: hidden; /* Ensures name overlay corners are clipped */
+    outline: 2px solid transparent; /* For focus/hover state */
+    outline-offset: 1px;
+    transition: outline-color 0.15s ease-in-out;
+  }
+  
+  .assetItem:hover {
+    outline-color: var(--accent-color, #6a7eff);
+  }
+  
+  .assetItem:active {
+    cursor: grabbing;
+  }
+  
+  .assetPreview {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1; /* Perfect square */
+    background-color: var(--bg-base, #202225);
+    object-fit: cover; /* For images */
+    
+    /* For icons, center them within the preview area */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary, #a0a0a0);
+  }
+  .iconPreview {
+    width: 100%;
+    height: 64px; /* Or whatever height you prefer for the preview area */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a0a0a0;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.05);
+    overflow: hidden; /* This is important for the image preview */
+  }
+  
+  /* --- ADD THIS NEW STYLE --- */
+  .imagePreview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Ensures the image covers the area without distortion */
+    object-position: center;
+  }
+  
+  .assetName {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 6px 4px 6px; /* Top padding pushes text down from the gradient fade */
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary, #f0f0f0);
+    text-align: center;
+    
+    /* A nice gradient fade instead of a solid block */
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 20%, transparent);
+    
+    /* Handle long file names gracefully */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }

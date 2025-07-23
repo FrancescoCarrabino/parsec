@@ -98,8 +98,13 @@ class FrameElement(Element):
     clipsContent: bool = True
     cornerRadius: float = 0
     # --- NEW FIELDS ---
-    speakerNotes: str = Field(default="", description="Private notes for the presenter.")
-    presentationOrder: Optional[int] = Field(default=None, description="The 0-based index of the frame in the presentation sequence. Null if not in presentation.")
+    speakerNotes: str = Field(
+        default="", description="Private notes for the presenter."
+    )
+    presentationOrder: Optional[int] = Field(
+        default=None,
+        description="The 0-based index of the frame in the presentation sequence. Null if not in presentation.",
+    )
 
 
 class PathElement(Element):
@@ -111,6 +116,7 @@ class PathElement(Element):
     stroke: Optional[Fill] = Field(default_factory=lambda: SolidFill(color="#333333"))
     strokeWidth: float = 1
 
+
 class ImageElement(Element):
     id: str = Field(default_factory=lambda: generate_id("image"))
     element_type: Literal["image"] = "image"
@@ -119,39 +125,65 @@ class ImageElement(Element):
     width: float = 1024
     height: float = 1024
 
+
 class Asset(BaseModel):
     """Represents a file asset stored in object storage."""
+
     id: str = Field(default_factory=lambda: generate_id("asset"))
     name: str  # The original filename, e.g., "logo.png"
-    asset_type: Literal['image', 'pdf', 'spreadsheet', 'csv', 'text', 'presentation', 'markdown', 'other']
+    asset_type: Literal[
+        "image",
+        "pdf",
+        "spreadsheet",
+        "csv",
+        "text",
+        "presentation",
+        "markdown",
+        "other",
+    ]
     mime_type: str  # The actual file MIME type, e.g., "image/png"
-    url: str # The permanent URL of the file in MinIO/S3
+    url: str  # The permanent URL of the file in MinIO/S3
+
 
 # --- NEW COMPONENT-RELATED MODELS ---
 
+
 class ComponentProperty(BaseModel):
     """Defines a single customizable property within a component's schema."""
+
     prop_name: str  # e.g., "button_text", "user_avatar_src"
-    target_element_id: str  # The ID of the element within the template this property controls
+    target_element_id: (
+        str  # The ID of the element within the template this property controls
+    )
     target_property: str  # e.g., "content" for TextElement, "src" for ImageElement
     prop_type: Literal["text", "image_url", "color"] = "text"
 
+
 class ComponentDefinition(BaseModel):
     """The master template for a component. This is NOT a canvas element itself."""
+
     id: str = Field(default_factory=lambda: generate_id("compdef"))
     name: str  # e.g., "User Profile Card"
-    template_elements: List[Dict[str, Any]] # Raw element data, not Pydantic models
+    template_elements: List[Dict[str, Any]]  # Raw element data, not Pydantic models
     schema: List[ComponentProperty] = []
+
 
 class ComponentInstanceElement(Element):
     """An actual instance of a component on the canvas. This IS a canvas element."""
+
     id: str = Field(default_factory=lambda: generate_id("compinst"))
     element_type: Literal["component_instance"] = "component_instance"
     definition_id: str
     properties: Dict[str, Any] = Field(default_factory=dict)
 
+
 # --- UPDATED UNION TYPE ---
 AnyElement = Union[
-    ShapeElement, FrameElement, GroupElement, TextElement, PathElement, ImageElement,
-    ComponentInstanceElement  # <-- ADDED
+    ShapeElement,
+    FrameElement,
+    GroupElement,
+    TextElement,
+    PathElement,
+    ImageElement,
+    ComponentInstanceElement,  # <-- ADDED
 ]

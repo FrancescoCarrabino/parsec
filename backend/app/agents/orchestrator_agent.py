@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from ..core.config import settings
 from .registry import AgentRegistry
 
+
 # A do-nothing fallback function to make the send_status_update parameter optional and safe.
 async def _do_nothing_sender(status: str, message: str, details: Dict = None):
     pass
@@ -14,10 +15,12 @@ async def _do_nothing_sender(status: str, message: str, details: Dict = None):
 # --- Plan Model Definition ---
 class Plan(BaseModel):
     """A Pydantic model for a structured plan of action, consisting of tasks."""
+
     tasks: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="A list of tasks, where each task specifies an agent and its objective."
+        description="A list of tasks, where each task specifies an agent and its objective.",
     )
+
 
 class OrchestratorAgent:
     """
@@ -25,15 +28,23 @@ class OrchestratorAgent:
     into a sequence of actionable tasks, assigning each task to the most appropriate specialist agent.
     It leverages a registry of agent capabilities and uses few-shot examples to guide its planning process.
     """
+
     def __init__(self, agent_registry: AgentRegistry):
         self.agent_registry = agent_registry
         logger.info("OrchestratorAgent initialized.")
 
-    async def create_plan(self, prompt: str, selected_ids: List[str] = None, send_status_update: Callable = _do_nothing_sender) -> Plan:
+    async def create_plan(
+        self,
+        prompt: str,
+        selected_ids: List[str] = None,
+        send_status_update: Callable = _do_nothing_sender,
+    ) -> Plan:
         """
         Generates a plan (list of tasks) based on the user's prompt and current context.
         """
-        logger.info(f"Orchestrator creating a plan for prompt: '{prompt}', with selected IDs: {selected_ids}")
+        logger.info(
+            f"Orchestrator creating a plan for prompt: '{prompt}', with selected IDs: {selected_ids}"
+        )
 
         # --- Prepare Agent Capabilities Summary ---
         available_agents = self.agent_registry.get_all_agents()
@@ -184,21 +195,23 @@ class OrchestratorAgent:
 
         try:
             await send_status_update("PLANNING", "Formulating a high-level plan...")
-            logger.debug(f"Sending prompt to LLM:\n{system_prompt}") # Log the full prompt for debugging
-            
+            logger.debug(
+                f"Sending prompt to LLM:\n{system_prompt}"
+            )  # Log the full prompt for debugging
+
             response = await litellm.acompletion(
                 model=settings.LITELLM_TEXT_MODEL,
                 messages=messages,
                 # Request JSON output directly from the model
                 response_format={"type": "json_object"},
-                temperature=0.1, # Low temperature for deterministic planning
+                temperature=0.1,  # Low temperature for deterministic planning
                 api_key=settings.AZURE_API_KEY_TEXT,
                 api_base=settings.AZURE_API_BASE_TEXT,
                 api_version=settings.AZURE_API_VERSION_TEXT,
             )
 
             plan_json_str = response.choices[0].message.content
-            logger.debug(f"LLM Raw Response: {plan_json_str}") # Log the raw LLM output
+            logger.debug(f"LLM Raw Response: {plan_json_str}")  # Log the raw LLM output
 
             if not plan_json_str:
                 raise ValueError("LLM returned an empty response.")
@@ -207,46 +220,64 @@ class OrchestratorAgent:
 
             # Validate the structure using Pydantic Plan model
             plan = Plan(**plan_data)
-            
+
             # --- Data Validation & Refinement ---
             validated_tasks = []
             for i, task in enumerate(plan.tasks):
                 if not task.get("agent_name"):
-                    logger.warning(f"Task {i+1} in plan is missing 'agent_name'. Skipping task.")
+                    logger.warning(
+                        f"Task {i+1} in plan is missing 'agent_name'. Skipping task."
+                    )
                     continue
                 if not task.get("objective"):
-                    logger.warning(f"Task {i+1} ('{task.get('agent_name')}') is missing 'objective'. Skipping task.")
+                    logger.warning(
+                        f"Task {i+1} ('{task.get('agent_name')}') is missing 'objective'. Skipping task."
+                    )
                     continue
                 if not task.get("reasoning"):
-                    logger.warning(f"Task {i+1} ('{task.get('agent_name')}') is missing 'reasoning'. Adding placeholder.")
-                    task["reasoning"] = "LLM did not provide reasoning." # Add placeholder
-                
+                    logger.warning(
+                        f"Task {i+1} ('{task.get('agent_name')}') is missing 'reasoning'. Adding placeholder."
+                    )
+                    task["reasoning"] = (
+                        "LLM did not provide reasoning."  # Add placeholder
+                    )
+
                 # Basic check: Does the agent exist?
                 if not self.agent_registry.get_agent(task["agent_name"]):
-                    logger.warning(f"Task {i+1} specified unknown agent '{task['agent_name']}'. This task might fail later. Attempting to proceed.")
+                    logger.warning(
+                        f"Task {i+1} specified unknown agent '{task['agent_name']}'. This task might fail later. Attempting to proceed."
+                    )
                     # Potentially offer alternatives or flag this task for manual intervention if possible.
                     # For now, we'll let it pass through and fail during execution.
 
                 validated_tasks.append(task)
-            
-            plan.tasks = validated_tasks # Update plan with validated tasks
-            
-            if not plan.tasks:
-                 logger.warning("Orchestrator generated a plan, but after validation, no valid tasks remain.")
-                 return Plan() # Return empty plan if all tasks were invalid
 
-            logger.success(f"Orchestrator successfully created a plan with {len(plan.tasks)} task(s).")
+            plan.tasks = validated_tasks  # Update plan with validated tasks
+
+            if not plan.tasks:
+                logger.warning(
+                    "Orchestrator generated a plan, but after validation, no valid tasks remain."
+                )
+                return Plan()  # Return empty plan if all tasks were invalid
+
+            logger.success(
+                f"Orchestrator successfully created a plan with {len(plan.tasks)} task(s)."
+            )
             return plan
 
         except json.JSONDecodeError as e:
-            logger.error(f"LLM response was not valid JSON: {e}. Response: {plan_json_str}")
+            logger.error(
+                f"LLM response was not valid JSON: {e}. Response: {plan_json_str}"
+            )
             await send_status_update("ERROR", str(e))
-            return Plan() # Return empty plan on JSON error
+            return Plan()  # Return empty plan on JSON error
         except ValueError as e:
-            logger.error(f"LLM response failed Pydantic validation: {e}. Response: {plan_json_str}")
+            logger.error(
+                f"LLM response failed Pydantic validation: {e}. Response: {plan_json_str}"
+            )
             await send_status_update("ERROR", str(e))
-            return Plan() # Return empty plan on validation error
+            return Plan()  # Return empty plan on validation error
         except Exception as e:
             logger.exception(f"Orchestrator failed during plan creation: {e}")
             await send_status_update("ERROR", str(e))
-            return Plan() # Return empty plan on any other exception
+            return Plan()  # Return empty plan on any other exception

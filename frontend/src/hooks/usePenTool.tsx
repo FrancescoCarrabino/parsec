@@ -9,7 +9,7 @@ import { Vector2d } from 'konva/lib/types';
 import { Path, Line, Circle } from 'react-konva';
 import { buildSvgPath } from '../utils/pathUtils';
 
-export const usePenTool = (forceUpdate: () => void) => {
+export const usePenTool = () => {
 	const { state, dispatch } = useAppState();
     const { activeTool } = state;
 	const [isDrawing, setIsDrawing] = useState(false);
@@ -57,7 +57,7 @@ export const usePenTool = (forceUpdate: () => void) => {
         
 		cancel();
 		dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'select' } });
-	}, [points, dispatch, forceUpdate]);
+	}, [points, dispatch]);
 
 	const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
 		if (!isPenToolActive) return;
@@ -78,7 +78,6 @@ export const usePenTool = (forceUpdate: () => void) => {
 
 		setPoints(prevPoints => [...prevPoints, { x: pos.x, y: pos.y }]);
 		setIsDrawing(true);
-        forceUpdate();
 	};
 
 	const onMouseMove = (e: KonvaEventObject<MouseEvent>) => {
@@ -87,7 +86,6 @@ export const usePenTool = (forceUpdate: () => void) => {
         if (!stage) return;
         const pos = stage.getRelativePointerPosition();
 		setPointerPos(pos || null);
-        forceUpdate();
 	};
 
 	const onDblClick = () => {
@@ -101,9 +99,6 @@ export const usePenTool = (forceUpdate: () => void) => {
 		setIsDrawing(false);
 		setPoints([]);
 		setPointerPos(null);
-        if (wasDrawing) {
-            forceUpdate();
-        }
 	};
     
     const renderPreview = (currentStageScale: number) => {

@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Settings(BaseSettings):
     """
     Manages application-wide settings, reading from environment variables.
     """
+
     model_config = SettingsConfigDict(extra="ignore")
 
     # --- Application Settings ---
@@ -34,9 +36,12 @@ class Settings(BaseSettings):
     MINIO_USE_SECURE: bool = False
     MINIO_PUBLIC_ENDPOINT: str = "http://localhost:9000"
 
+    BACKEND_BASE_URL: str = "http://localhost:8000"
+
     # --- Logging Settings ---
     LOG_LEVEL: str = "INFO"
     LOG_AS_JSON: bool = False
+
 
 # Global settings instance
 settings = Settings()

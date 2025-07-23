@@ -3,13 +3,16 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Callable, Any
 from abc import ABC, abstractmethod
 
+
 class Tool(BaseModel):
     """
     A Pydantic model representing a single tool that an agent can use.
     This structure is compatible with the OpenAI Functions/Tools API.
     """
+
     type: str = "function"
     function: Dict[str, Any]
+
 
 class Agent(ABC):
     """
@@ -28,7 +31,7 @@ class Agent(ABC):
     def description(self) -> Dict[str, str]:
         """A one-sentence description of the agent's expertise. For semantic search."""
         pass
-    
+
     @property
     @abstractmethod
     def tools(self) -> List[Tool]:

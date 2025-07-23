@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # This is your main backend application (if you were to containerize it)
+  # backend:
+  #   ...
+  #   networks:
+  #     - parsec-net
+
+  # This is our new, permanent Nginx reverse proxy
+  parsec-proxy:
+    build:
+      context: ./backend/nginx
+    ports:
+      - "8889:8889" # Expose the proxy to your host machine
+    networks:
+      - parsec-net
+    container_name: parsec-proxy
+    
+networks:
+  parsec-net:
+    driver: bridge

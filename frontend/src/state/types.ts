@@ -72,6 +72,7 @@ export type CanvasElement = ShapeElement | GroupElement | TextElement | FrameEle
 export interface WorkspaceState {
     elements: CanvasElement[];
     componentDefinitions: ComponentDefinition[];
+    assets: AssetItem[];
 }
 
 export type ActiveTool = 'select' | 'rectangle' | 'text' | 'frame' | 'ellipse' | 'pen';
@@ -95,6 +96,32 @@ export interface AgentStatus {
 	};
   }
 
+export type AssetType = 'image' | 'pdf' | 'spreadsheet' | 'csv' | 'text' | 'presentation' | 'markdown' | 'other';
+
+export interface AssetItem {
+  id: string;
+  name: string;
+  url: string;      // Local blob URL or remote URL from backend
+  type: AssetType;  // Use our new flexible type
+  // Optional: Store the raw file type for more specific handling
+  mimeType: string; // e.g., 'image/png', 'application/vnd.ms-excel'
+}
+
+// Represents a single message in the chat history
+export interface ChatMessage {
+    id: string; // Unique ID for the message
+    sender: 'user' | 'ai';
+    text: string;
+  }
+  
+  // Represents the state of an active interactive analysis session
+  export interface AnalysisSession {
+    sessionId: string;
+    isActive: boolean;
+    messages: ChatMessage[];
+    currentCode: string;
+  }
+
 // MODIFIED: The main AppState now includes the presentation state
 export type AppState = {
 	elements: Record<string, CanvasElement>;
@@ -105,30 +132,38 @@ export type AppState = {
     editingElementId: string | null;
     presentation: PresentationState;
 	agentStatus: AgentStatus | null;
+    assets: Record<string, AssetItem>;
+    analysisSession: AnalysisSession | null;
 };
 
 
 
-// MODIFIED: Added new actions for presentation mode
 export type Action =
 	| { type: 'SET_WORKSPACE_STATE'; payload: WorkspaceState }
 	| { type: 'ELEMENT_CREATED'; payload: CanvasElement }
+    | { type: 'ELEMENTS_CREATED'; payload: CanvasElement[] } // <-- ADDED
 	| { type: 'ELEMENT_UPDATED'; payload: CanvasElement }
 	| { type: 'ELEMENTS_UPDATED'; payload: CanvasElement[] }
 	| { type: 'ELEMENT_DELETED'; payload: { id: string } }
     | { type: 'COMPONENT_DEFINITION_CREATED'; payload: ComponentDefinition }
 	| { type: 'SET_SELECTION'; payload: { ids: string[] } }
 	| { type: 'ADD_TO_SELECTION'; payload: { id: string } }
+    | { type: 'ADD_ASSET'; payload: AssetItem }
+    | { type: 'DELETE_ASSET'; payload: { id: string } } // <-- ADDED
 	| { type: 'REMOVE_FROM_SELECTION'; payload: { id:string } }
 	| { type: 'ENTER_GROUP_EDITING'; payload: { groupId: string; elementId: string } }
 	| { type: 'EXIT_GROUP_EDITING' }
 	| { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
     | { type: 'SET_EDITING_ELEMENT_ID'; payload: { id: string | null } }
-    // --- NEW PRESENTATION ACTIONS ---
     | { type: 'START_PRESENTATION'; payload: { presenterWindow: Window | null } }
     | { type: 'STOP_PRESENTATION' }
     | { type: 'NEXT_SLIDE' }
     | { type: 'PREV_SLIDE' }
     | { type: 'SET_SLIDE'; payload: { index: number } }
     | { type: 'AGENT_STATUS_UPDATE'; payload: AgentStatus }
-    | { type: 'CLEAR_AGENT_STATUS' };
+    | { type: 'CLEAR_AGENT_STATUS' }
+    | { type: 'WORKSPACE_RESET'; payload: { elements: CanvasElement[] } }
+    | { type: 'ANALYSIS_SESSION_STARTED'; payload: { sessionId: string } }
+    | { type: 'ANALYSIS_SESSION_ENDED' }
+    | { type: 'ANALYSIS_CODE_UPDATED'; payload: { code: string } }
+    | { type: 'ANALYSIS_MESSAGE_RECEIVED'; payload: { message: ChatMessage } };
